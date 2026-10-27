@@ -1,58 +1,235 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# IDS Log Analyzer
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A web-based expert system for detecting cyber attacks from server logs. The application uses **forward chaining** to evaluate log facts against a configurable knowledge base of expert rules, then records each result as either `SAFE` or `ATTACK`.
 
-## About Laravel
+Built with **Laravel 13** and **Filament 5**.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Features
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Dynamic knowledge base** — create, update, and delete expert rules from the admin panel without changing application code.
+- **Forward chaining inference engine** — evaluates each log entry against the rules stored in the database.
+- **CSV, JSON, and TXT log uploads** — accepts files up to 5 MB (configurable) and validates every row.
+- **Analysis result table** — shows the source IP, target port, failed attempts, status, triggered rule, and analysis time. Attacked rows are highlighted in red.
+- **Filtering** — filter results by status or show attacks only.
+- **Dashboard analytics** — displays the number of rules, analyzed log rows, detected attacks, and safe traffic.
+- **Authentication** — the admin panel is protected by Filament's login page.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Requirements
 
-## Learning Laravel
+- PHP 8.3 or newer
+- Composer 2
+- Node.js 20 or newer with npm
+- SQLite (default) or MySQL/PostgreSQL
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Installation
 
 ```bash
-composer require laravel/boost --dev
+composer install
+cp .env.example .env
+php artisan key:generate
 
-php artisan boost:install
+touch database/database.sqlite
+php artisan migrate --seed
+
+npm install
+npm run build
+
+php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+If you use MySQL or PostgreSQL, configure the `DB_*` variables in `.env` and create the database before running `php artisan migrate --seed`. You do not need to create `database/database.sqlite` in that case.
 
-## Contributing
+The application is served at `http://localhost:8000`, but the IDS interface lives inside the Filament admin panel. Open:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```text
+http://localhost:8000/admin
+```
 
-## Code of Conduct
+The root URL `/` is the default Laravel welcome page and is not part of the IDS application.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Default Login
 
-## Security Vulnerabilities
+The database seeder creates an administrator account from the values in `config/ids.php`:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```text
+Email:    admin@ids.test
+Password: password
+```
+
+Change these values before deploying to production:
+
+```dotenv
+IDS_ADMIN_NAME=Administrator
+IDS_ADMIN_EMAIL=admin@ids.test
+IDS_ADMIN_PASSWORD=password
+```
+
+Re-run `php artisan db:seed` after changing the values, or update the account directly from the database.
+
+## Application Routes
+
+| Method | URI                    | Description                                      |
+| ------ | ---------------------- | ------------------------------------------------ |
+| GET    | `/`                    | Default Laravel welcome page                     |
+| GET    | `/admin/login`         | Administrator login                              |
+| GET    | `/admin`               | Dashboard with statistics and latest results     |
+| GET    | `/admin/log-analyzer`  | Upload a log file and run the inference engine   |
+| GET    | `/admin/expert-rules`  | Manage the expert rule knowledge base            |
+| GET    | `/admin/scan-results`  | View and filter all analysis results             |
+
+## How Detection Works
+
+1. The uploaded file is parsed into normalized fact entries: source IP, target port, and failed attempts.
+2. The inference engine loads all expert rules from the `expert_rules` table.
+3. Rules are evaluated from the strictest minimum failure count to the most lenient. The first rule whose `target_port` matches and whose `min_failed_attempts` is less than or equal to the log's failed attempts is triggered.
+4. The log entry is marked `ATTACK` and linked to the triggered rule. If no rule matches, it is marked `SAFE`.
+5. Every result is stored in the `scan_results` table and displayed on the dashboard and results page.
+
+The business logic is separated from the UI:
+
+- `app/Services/LogParser.php` — parses and validates log files.
+- `app/Services/InferenceEngine.php` — performs forward chaining.
+- `app/Actions/AnalyzeLogFile.php` — orchestrates parsing, inference, and persistence.
+
+## Supported Log Files
+
+Upload CSV, JSON, or TXT files. CSV files may include a header row or be headerless.
+
+CSV with a header:
+
+```csv
+source_ip,target_port,failed_attempts
+203.0.113.10,22,8
+198.51.100.20,22,2
+```
+
+Headerless CSV (columns must be in this order: IP, port, failed attempts):
+
+```csv
+203.0.113.10,22,8
+198.51.100.20,22,2
+```
+
+JSON:
+
+```json
+{
+    "logs": [
+        {
+            "source_ip": "203.0.113.10",
+            "target_port": 22,
+            "failed_attempts": 8
+        }
+    ]
+}
+```
+
+The parser accepts these column aliases:
+
+| Field           | Accepted names                                                              |
+| --------------- | --------------------------------------------------------------------------- |
+| Source IP       | `source_ip`, `ip`, `src_ip`, `source`, `ip_address`, `src`                  |
+| Target port     | `target_port`, `port`, `dst_port`, `destination_port`, `dport`               |
+| Failed attempts | `failed_attempts`, `failed_count`, `failed_logins`, `failures`, `attempts`  |
+
+A sample log file is available at `tests/Fixtures/logs/traffic.csv`.
+
+Upload size is limited by `IDS_MAX_UPLOAD_KB` (default: `5120`, or 5 MB).
+
+## Database Schema
+
+### `expert_rules` — knowledge base
+
+| Column                | Type              | Description                                  |
+| --------------------- | ----------------- | -------------------------------------------- |
+| `id`                  | bigint, PK        | Primary key                                  |
+| `rule_name`           | string            | Rule name, e.g. "Deteksi Brute Force SSH"    |
+| `target_port`         | unsigned smallint | Monitored destination port                   |
+| `min_failed_attempts` | unsigned int      | Minimum failed attempts before triggering    |
+| `threat_level`        | string            | `LOW`, `MEDIUM`, `HIGH`, or `CRITICAL`       |
+| `conclusion_message`  | string            | Conclusion shown when the rule is triggered  |
+| `created_at`          | timestamp         | Creation time                                |
+| `updated_at`          | timestamp         | Last update time                             |
+
+### `scan_results` — output log
+
+| Column              | Type              | Description                                             |
+| ------------------- | ----------------- | ------------------------------------------------------- |
+| `id`                | bigint, PK        | Primary key                                             |
+| `source_ip`         | string            | Source IP address from the log                          |
+| `target_port`       | unsigned smallint | Destination port from the log                           |
+| `failed_attempts`   | unsigned int      | Failed attempts from the log                            |
+| `status`            | string            | `SAFE` or `ATTACK`                                      |
+| `triggered_rule_id` | bigint, FK, null  | References `expert_rules.id`; null when no rule matches |
+| `created_at`        | timestamp         | Analysis time                                           |
+| `updated_at`        | timestamp         | Last update time                                        |
+
+## Project Structure
+
+```text
+app/
+├── Actions/
+│   └── AnalyzeLogFile.php
+├── Data/
+│   └── ScanSummary.php
+├── Enums/
+│   ├── ScanStatus.php
+│   └── ThreatLevel.php
+├── Exceptions/
+│   └── InvalidLogFileException.php
+├── Filament/
+│   ├── Pages/
+│   │   └── LogAnalyzer.php
+│   ├── Resources/
+│   │   ├── ExpertRules/
+│   │   └── ScanResults/
+│   └── Widgets/
+│       ├── LatestScanResults.php
+│       └── ScanStatsOverview.php
+├── Models/
+│   ├── ExpertRule.php
+│   └── ScanResult.php
+└── Services/
+    ├── InferenceEngine.php
+    └── LogParser.php
+```
+
+## Testing
+
+This project uses Pest.
+
+```bash
+php artisan test --compact
+```
+
+The test suite covers the log parser, inference engine, analysis action, admin panel access, rule creation and validation, result filtering, and the database seeder.
+
+## Code Style
+
+Format PHP files with Laravel Pint:
+
+```bash
+vendor/bin/pint --dirty --format agent
+```
+
+## Deployment Notes
+
+1. Set `APP_ENV=production` and `APP_DEBUG=false`.
+2. Configure production database credentials and set a strong `IDS_ADMIN_PASSWORD`.
+3. Install dependencies and build assets:
+
+   ```bash
+   composer install --no-dev --optimize-autoloader
+   php artisan migrate --force
+   npm ci
+   npm run build
+   php artisan filament:assets
+   php artisan optimize
+   ```
+
+4. Ensure `storage/` and `bootstrap/cache/` are writable by the web server.
+5. Only create administrator accounts for trusted users. The panel has no public registration page.
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+This application is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
