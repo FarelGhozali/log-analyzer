@@ -15,7 +15,7 @@ use Tests\TestCase;
 */
 
 pest()->extend(TestCase::class)
- // ->use(RefreshDatabase::class)
+    ->use(RefreshDatabase::class)
     ->in('Feature');
 
 /*
@@ -44,7 +44,7 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+function fixturePath(string $path): string
 {
-    // ..
+    return __DIR__.'/Fixtures/'.$path;
 }

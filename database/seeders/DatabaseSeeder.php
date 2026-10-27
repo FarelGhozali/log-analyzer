@@ -15,11 +15,14 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        User::query()->updateOrCreate(
+            ['email' => config('ids.admin.email')],
+            [
+                'name' => config('ids.admin.name'),
+                'password' => config('ids.admin.password'),
+            ],
+        );
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        $this->call(ExpertRuleSeeder::class);
     }
 }
