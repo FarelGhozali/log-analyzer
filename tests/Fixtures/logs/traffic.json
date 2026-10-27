@@ -1,0 +1,14 @@
+{
+    "logs": [
+        {
+            "source_ip": "203.0.113.10",
+            "target_port": 22,
+            "failed_attempts": 6
+        },
+        {
+            "source_ip": "198.51.100.20",
+            "port": 443,
+            "failed_count": 9
+        }
+    ]
+}
