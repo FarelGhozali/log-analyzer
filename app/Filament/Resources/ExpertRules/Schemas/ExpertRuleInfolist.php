@@ -14,8 +14,7 @@ class ExpertRuleInfolist
                 TextEntry::make('rule_name')
                     ->label('Nama Aturan'),
                 TextEntry::make('target_port')
-                    ->label('Target Port')
-                    ->numeric(),
+                    ->label('Target Port'),
                 TextEntry::make('min_failed_attempts')
                     ->label('Minimal Percobaan Gagal')
                     ->numeric(),

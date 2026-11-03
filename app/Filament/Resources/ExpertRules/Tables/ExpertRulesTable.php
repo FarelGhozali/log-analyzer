@@ -23,7 +23,6 @@ class ExpertRulesTable
                     ->wrap(),
                 TextColumn::make('target_port')
                     ->label('Target Port')
-                    ->numeric()
                     ->sortable(),
                 TextColumn::make('min_failed_attempts')
                     ->label('Min. Percobaan Gagal')

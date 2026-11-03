@@ -25,7 +25,6 @@ class ScanResultsTable
                     ->copyable(),
                 TextColumn::make('target_port')
                     ->label('Target Port')
-                    ->numeric()
                     ->sortable(),
                 TextColumn::make('failed_attempts')
                     ->label('Percobaan Gagal')

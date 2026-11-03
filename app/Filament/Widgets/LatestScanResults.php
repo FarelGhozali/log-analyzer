@@ -33,8 +33,7 @@ class LatestScanResults extends TableWidget
                     ->label('IP Sumber')
                     ->copyable(),
                 TextColumn::make('target_port')
-                    ->label('Target Port')
-                    ->numeric(),
+                    ->label('Target Port'),
                 TextColumn::make('failed_attempts')
                     ->label('Percobaan Gagal')
                     ->numeric(),
