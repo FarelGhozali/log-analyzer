@@ -52,7 +52,7 @@ Filament Dashboard
 
 | Component | Responsibility |
 |---|---|
-| `LogParser` | Parses and validates CSV, JSON, or delimited log data |
+| `LogParser` | Parses and validates CSV, JSON, SSH/syslog, Apache access, or delimited log data |
 | `ExpertRule` | Stores the rule knowledge base |
 | `InferenceEngine` | Applies Forward Chaining to normalized facts |
 | `AnalyzeLogFile` | Coordinates parsing, inference, and persistence |
@@ -661,6 +661,42 @@ An advanced rule referencing `message`, `uri`, or `timestamp` requires those fie
 
 ### Upload Logs
 
+The Log Analyzer accepts the following file formats:
+
+| Format | Supported structure |
+|---|---|
+| `.csv` | Headered or headerless CSV containing source IP, target port, and failed attempts |
+| `.json` | A log object, an array of log objects, or an object containing a `logs` array |
+| `.log` / `.txt` | Linux SSH/syslog authentication lines or Apache/Nginx combined access-log lines |
+
+#### SSH or Syslog `.log`
+
+SSH log files can be uploaded directly. The parser extracts the source IP,
+destination port, authentication result, original message, and timestamp.
+
+```text
+Nov 05 09:57:00 server sshd[5667]: Failed password for invalid user admin from 201.43.187.77 port 22 ssh2
+Nov 05 09:57:01 server sshd[50675]: Failed password for invalid user admin from 201.43.187.77 port 22 ssh2
+```
+
+Each failed-password line produces `failed_attempts: 1`. Successful
+`Accepted password` and `Accepted publickey` lines produce
+`failed_attempts: 0`. Because syslog timestamps do not contain a year, the
+current application year is used when normalizing them.
+
+#### Apache or Nginx Combined `.log`
+
+Combined access-log files can also be uploaded directly:
+
+```text
+192.0.2.10 - - [05/Nov/2026:09:57:00 +0000] "POST /login HTTP/1.1" 401 1024 "-" "Mozilla/5.0"
+```
+
+The parser extracts `source_ip`, `uri`, HTTP method, status code, timestamp,
+and maps the request to target port `80`. Responses with status codes `400`
+or higher produce `failed_attempts: 1`; successful responses produce
+`failed_attempts: 0`.
+
 CSV:
 
 ```csv
@@ -786,8 +822,9 @@ php artisan make:mock-logs web --lines=250
 
 The generated raw SSH and web logs are simulation artifacts. They are useful
 for testing log formatting and detection rules, but they are not production
-telemetry. For direct upload through the Log Analyzer, use parser-compatible
-CSV or JSON containing the normalized fields required by the selected rule.
+telemetry. They can be uploaded directly through the Log Analyzer as `.log`
+files. Advanced rules still require the uploaded log records to contain the
+fields referenced by the rule.
 
 Run the complete test suite:
 
