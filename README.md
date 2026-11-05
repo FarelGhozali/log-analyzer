@@ -222,6 +222,264 @@ Supported operators:
 | `less_than_or_equal` | Numeric less-than-or-equal comparison |
 | `between` | Value lies between two boundaries |
 
+### How to Construct a Custom JSON Rule
+
+The value stored in `advanced_conditions` must be one valid JSON object. Do not wrap the rule in a `logs` array; `logs` is only used for uploaded log files.
+
+Construct a rule in this order:
+
+1. Identify the fact that must be inspected, such as `message`, `uri`, `target_port`, or `timestamp`.
+2. Select either the primary regex format or the structured condition format.
+3. Select an operator that is compatible with the fact's data type.
+4. Define the comparison value, regular expression, or value list.
+5. Add a threshold and time window when multiple events must be counted.
+6. Confirm that every referenced field exists in the uploaded log records.
+7. Validate that the final content is valid JSON before saving it.
+
+The JSON rule is entered in the **Kondisi Lanjutan** CodeEditor field. The template selector can populate an initial example, but the resulting JSON can be edited manually.
+
+#### Format A: Regex and Event Threshold
+
+Use this format when a regular expression must be counted across log records:
+
+```json
+{
+    "match_type": "regex",
+    "pattern": "/failed\\s+password/i",
+    "threshold": 5
+}
+```
+
+Field requirements:
+
+| Field | Required | Valid value |
+|---|---:|---|
+| `match_type` | Yes | `"regex"` |
+| `pattern` | Yes | A valid PHP-compatible regular expression |
+| `threshold` | Yes | Positive integer |
+| `time_window_minutes` | No | Integer greater than or equal to `0` |
+
+The pattern is tested against every scalar value in each parsed log record. A record is counted when any scalar value matches the pattern.
+
+For example, this rule counts failed authentication messages:
+
+```json
+{
+    "match_type": "regex",
+    "pattern": "/failed\\s+(?:password|login|authentication)/i",
+    "threshold": 3
+}
+```
+
+#### Format B: Regex with a Time Window
+
+Add `time_window_minutes` when matching events must occur within a limited period:
+
+```json
+{
+    "match_type": "regex",
+    "pattern": "/failed\\s+password/i",
+    "time_window_minutes": 5,
+    "threshold": 5
+}
+```
+
+The evaluator:
+
+1. Uses the current record's `timestamp` as the end of the window.
+2. Subtracts `time_window_minutes` to calculate the start.
+3. Keeps records from the same `source_ip`.
+4. Counts records whose timestamps fall inside the inclusive window.
+5. Triggers the rule when the count is greater than or equal to `threshold`.
+
+Every record used by a time-window rule must contain a parseable timestamp. ISO 8601 is recommended:
+
+```json
+{
+    "timestamp": "2026-11-10T10:04:00Z"
+}
+```
+
+Example input for the previous rule:
+
+```json
+{
+    "logs": [
+        {
+            "source_ip": "203.0.113.10",
+            "target_port": 22,
+            "failed_attempts": 1,
+            "message": "Failed password for admin",
+            "timestamp": "2026-11-10T10:00:00Z"
+        },
+        {
+            "source_ip": "203.0.113.10",
+            "target_port": 22,
+            "failed_attempts": 1,
+            "message": "Failed password for root",
+            "timestamp": "2026-11-10T10:02:00Z"
+        },
+        {
+            "source_ip": "203.0.113.10",
+            "target_port": 22,
+            "failed_attempts": 1,
+            "message": "Failed password for test",
+            "timestamp": "2026-11-10T10:04:00Z"
+        }
+    ]
+}
+```
+
+The first object is the rule JSON. The second object is an uploaded log file. They are separate inputs and must not be combined.
+
+#### Format C: Single Structured Condition
+
+Use a single condition when one field is sufficient:
+
+```json
+{
+    "field": "message",
+    "operator": "contains",
+    "value": "failed password"
+}
+```
+
+The `field` must match a key in the normalized log record. The `value` type should match the field:
+
+```json
+{
+    "field": "target_port",
+    "operator": "equals",
+    "value": 22
+}
+```
+
+```json
+{
+    "field": "log_file",
+    "operator": "in",
+    "value": ["auth.log", "secure.log"]
+}
+```
+
+#### Format D: Multiple Conditions with `all`
+
+Use `all` when every condition must be true:
+
+```json
+{
+    "all": [
+        {
+            "field": "target_port",
+            "operator": "in",
+            "value": [80, 443]
+        },
+        {
+            "field": "uri",
+            "operator": "regex",
+            "value": "/(?:wp-admin|\\.env|\\.git|phpmyadmin)/i"
+        }
+    ]
+}
+```
+
+#### Format E: Multiple Conditions with `any`
+
+Use `any` when at least one condition must be true:
+
+```json
+{
+    "any": [
+        {
+            "field": "message",
+            "operator": "contains",
+            "value": "union select"
+        },
+        {
+            "field": "uri",
+            "operator": "regex",
+            "value": "/or\\s+1\\s*=\\s*1/i"
+        }
+    ]
+}
+```
+
+### JSON Construction Rules
+
+- Use double quotes for JSON keys and string values.
+- Do not add a trailing comma after the last property or array element.
+- Use JSON numbers for numeric comparisons, not quoted strings.
+- Escape backslashes inside regex strings. For example, write `\\s` in JSON to produce the regex token `\s`.
+- Enclose PHP regex patterns in delimiters such as `/.../i`.
+- Use `threshold` values greater than or equal to `1`.
+- Use non-negative values for `time_window_minutes`.
+- Use `timestamp` values that can be parsed by Carbon.
+- Use only fields present in the uploaded facts.
+- An unknown operator or missing field causes the structured condition to fail.
+- A malformed regex does not produce a match.
+- An empty JSON object is accepted as an empty advanced condition, but it does not express a meaningful detection rule.
+
+### Common Invalid JSON
+
+Invalid because single quotes are not JSON syntax:
+
+```text
+{'field': 'target_port', 'operator': 'equals', 'value': 22}
+```
+
+Invalid because of the trailing comma:
+
+```json
+{
+    "field": "target_port",
+    "operator": "equals",
+    "value": 22,
+}
+```
+
+Invalid because the regular expression backslash is not escaped:
+
+```json
+{
+    "match_type": "regex",
+    "pattern": "/failed\s+password/i",
+    "threshold": 1
+}
+```
+
+Correct form:
+
+```json
+{
+    "match_type": "regex",
+    "pattern": "/failed\\s+password/i",
+    "threshold": 1
+}
+```
+
+### Important Interaction with Basic Fields
+
+When `advanced_conditions` is `null`, the engine uses the existing Basic Mode evaluation based on `target_port` and `min_failed_attempts`.
+
+When `advanced_conditions` contains JSON, the engine routes the rule to the Advanced Mode evaluator. The basic port and failed-attempt comparison is not automatically combined with that JSON object. If an advanced rule also needs a port restriction, include it in the structured JSON conditions:
+
+```json
+{
+    "all": [
+        {
+            "field": "target_port",
+            "operator": "equals",
+            "value": 22
+        },
+        {
+            "field": "message",
+            "operator": "regex",
+            "value": "/failed\\s+password/i"
+        }
+    ]
+}
+```
+
 ## Installation and Deployment
 
 ### Containerized Deployment
@@ -552,4 +810,3 @@ This project demonstrates:
 - Deterministic Forward Chaining.
 - Dual-mode rule evaluation.
 - Separation of inference logic from presentation and persistence layers.
-
