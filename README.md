@@ -1,113 +1,415 @@
 # IDS Log Analyzer
 
-A web-based expert system for detecting cyber attacks from server logs. The application uses **forward chaining** to evaluate log facts against a configurable knowledge base of expert rules, then records each result as either `SAFE` or `ATTACK`.
+## Abstract
 
-Built with **Laravel 13** and **Filament 5**.
+IDS Log Analyzer is a Laravel-based expert system for classifying server log events as `SAFE` or `ATTACK`. It demonstrates Artificial Intelligence concepts through fact normalization, a database-backed knowledge base, and deterministic Forward Chaining inference.
 
-## Features
+The application supports two rule modes:
 
-- **Dynamic knowledge base** — create, update, and delete expert rules from the admin panel without changing application code.
-- **Forward chaining inference engine** — evaluates each log entry against the rules stored in the database.
-- **CSV, JSON, and TXT log uploads** — accepts files up to 5 MB (configurable) and validates every row.
-- **Analysis result table** — shows the source IP, target port, failed attempts, status, triggered rule, and analysis time. Attacked rows are highlighted in red.
-- **Filtering** — filter results by status or show attacks only.
-- **Dashboard analytics** — displays the number of rules, analyzed log rows, detected attacks, and safe traffic.
-- **Authentication** — the admin panel is protected by Filament's login page.
+1. **Basic Mode** — evaluates target ports and failed-attempt thresholds through the existing GUI fields.
+2. **Advanced Mode** — evaluates JSON conditions, regular expressions, source correlation, and time-window thresholds.
 
-## Requirements
+The project is intended for academic evaluation, controlled experimentation, and development of rule-based intrusion-detection workflows.
 
-- PHP 8.3 or newer
-- Composer 2
-- Node.js 20 or newer with npm
-- SQLite (default) or MySQL/PostgreSQL
+## Technology Stack
 
-## Installation
+| Component | Technology |
+|---|---|
+| Backend | Laravel 13 |
+| Language | PHP 8.3 or newer |
+| Administration panel | Filament 5 |
+| Database | SQLite by default; PostgreSQL-compatible configuration supported |
+| Containerization | Docker or Podman |
+| Web server | Nginx with PHP-FPM |
+| Testing | Pest |
+| Inference strategy | Forward Chaining |
+
+## System Architecture
+
+```text
+Log File
+   |
+   v
+LogParser
+   |
+   v
+Normalized Facts
+   |
+   v
+InferenceEngine <---- ExpertRule Knowledge Base
+   |
+   v
+Threat Classification
+   |
+   v
+ScanResult Persistence
+   |
+   v
+Filament Dashboard
+```
+
+### Core Components
+
+| Component | Responsibility |
+|---|---|
+| `LogParser` | Parses and validates CSV, JSON, or delimited log data |
+| `ExpertRule` | Stores the rule knowledge base |
+| `InferenceEngine` | Applies Forward Chaining to normalized facts |
+| `AnalyzeLogFile` | Coordinates parsing, inference, and persistence |
+| `ScanResult` | Stores each classification result |
+| `MakeMockLogs` | Generates controlled SSH and web log samples |
+| Filament Resources | Provides administrative interfaces |
+
+Important implementation files:
+
+```text
+app/
+├── Actions/AnalyzeLogFile.php
+├── Console/Commands/MakeMockLogs.php
+├── Filament/
+├── Models/
+│   ├── ExpertRule.php
+│   └── ScanResult.php
+└── Services/
+    ├── ExpertRuleConditionTemplates.php
+    ├── InferenceEngine.php
+    └── LogParser.php
+```
+
+## Artificial Intelligence Logic
+
+### Forward Chaining
+
+The inference engine uses a data-driven Forward Chaining process:
+
+1. Load expert rules from the database.
+2. Parse the uploaded file.
+3. Normalize each record into structured facts.
+4. Evaluate facts against rule conditions.
+5. Select the first matching rule according to rule ordering.
+6. Classify the record as `ATTACK` or `SAFE`.
+7. Persist the result.
+
+For Basic Mode:
+
+```text
+log.target_port == rule.target_port
+AND
+log.failed_attempts >= rule.min_failed_attempts
+```
+
+The conclusions are deterministic. Identical facts and identical rules produce identical results. The engine does not train a statistical model or calculate probabilistic confidence.
+
+### Fact Normalization
+
+The minimum normalized structure is:
+
+```json
+{
+    "source_ip": "203.0.113.10",
+    "target_port": 22,
+    "failed_attempts": 8
+}
+```
+
+Additional JSON or CSV fields are retained for advanced evaluation:
+
+```json
+{
+    "source_ip": "203.0.113.10",
+    "target_port": 443,
+    "failed_attempts": 1,
+    "message": "Failed password for admin",
+    "uri": "/login",
+    "timestamp": "2026-11-10T10:04:00Z",
+    "log_file": "auth.log"
+}
+```
+
+Supported aliases include:
+
+| Normalized field | Accepted aliases |
+|---|---|
+| `source_ip` | `source_ip`, `ip`, `src_ip`, `source`, `ip_address`, `src` |
+| `target_port` | `target_port`, `port`, `dst_port`, `destination_port`, `dport` |
+| `failed_attempts` | `failed_attempts`, `failed_count`, `failed_logins`, `failures`, `attempts`, `failed` |
+
+## Rule Engine
+
+### Basic Mode
+
+Basic Mode preserves the original GUI fields:
+
+- `target_port`
+- `min_failed_attempts`
+- `threat_level`
+- `conclusion_message`
+
+Example:
+
+```text
+Target port: 22
+Minimum failed attempts: 5
+```
+
+A record with port `22` and at least five failed attempts triggers the rule.
+
+Rules are ordered by the highest `min_failed_attempts` first, followed by the lowest rule ID. This causes stricter thresholds to take precedence.
+
+### Advanced Mode
+
+Advanced Mode is active when `advanced_conditions` contains JSON. The JSON evaluator supports regular expressions, thresholds, source-IP correlation, and time windows.
+
+Primary format:
+
+```json
+{
+    "match_type": "regex",
+    "pattern": "/failed\\s+password/i",
+    "time_window_minutes": 5,
+    "threshold": 5
+}
+```
+
+| Property | Type | Description |
+|---|---|---|
+| `match_type` | string | Currently supported value: `regex` |
+| `pattern` | string | PHP-compatible regular expression |
+| `time_window_minutes` | integer | Duration of the evaluation window |
+| `threshold` | integer | Minimum matching events required |
+
+For time-window rules, matching records are counted for the same `source_ip`. The current record timestamp is the end of the window. Records without valid timestamps do not satisfy a time-window rule.
+
+Timestamp example:
+
+```text
+2026-11-10T10:04:00Z
+```
+
+### Advanced Condition Format
+
+The application also supports `all`, `any`, and field operators.
+
+```json
+{
+    "all": [
+        {
+            "field": "target_port",
+            "operator": "in",
+            "value": [80, 443]
+        },
+        {
+            "field": "uri",
+            "operator": "regex",
+            "value": "/(?:wp-admin|\\.env|\\.git)/i"
+        }
+    ]
+}
+```
+
+Supported operators:
+
+| Operator | Meaning |
+|---|---|
+| `equals` | Exact or numeric equality |
+| `not_equals` | Different value |
+| `contains` | Case-insensitive substring search |
+| `regex` | Regular expression matching |
+| `in` | Value exists in an array |
+| `greater_than` | Numeric greater-than comparison |
+| `greater_than_or_equal` | Numeric greater-than-or-equal comparison |
+| `less_than` | Numeric less-than comparison |
+| `less_than_or_equal` | Numeric less-than-or-equal comparison |
+| `between` | Value lies between two boundaries |
+
+## Installation and Deployment
+
+### Containerized Deployment
+
+Requirements:
+
+- Docker Engine with Docker Compose, or Podman with Compose support.
+- TCP port `9000`, unless overridden.
+
+Start the application:
+
+```bash
+docker-compose up -d
+```
+
+For Podman:
+
+```bash
+podman compose up -d
+```
+
+Check service status:
+
+```bash
+docker-compose ps
+```
+
+The application is available at:
+
+```text
+http://localhost:9000
+```
+
+The Filament panel is available at:
+
+```text
+http://localhost:9000/admin
+```
+
+View logs:
+
+```bash
+docker-compose logs -f app
+docker-compose logs -f web
+```
+
+Run migrations:
+
+```bash
+docker-compose exec app php artisan migrate --force
+```
+
+Stop the deployment:
+
+```bash
+docker-compose down
+```
+
+### Environment Configuration
+
+The Compose deployment uses SQLite by default:
+
+```dotenv
+DB_CONNECTION=sqlite
+DB_DATABASE=/var/www/html/database/database.sqlite
+```
+
+Common configuration values:
+
+```dotenv
+APP_NAME=IDS Log Analyzer
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=http://localhost:9000
+APP_TIMEZONE=UTC
+APP_PORT=9000
+
+IDS_ADMIN_NAME=Administrator
+IDS_ADMIN_EMAIL=admin@example.test
+IDS_ADMIN_PASSWORD=change-this-password
+```
+
+To use PostgreSQL, configure the Laravel database variables and provide a PostgreSQL service separately:
+
+```dotenv
+DB_CONNECTION=pgsql
+DB_HOST=postgres
+DB_PORT=5432
+DB_DATABASE=ids_log_analyzer
+DB_USERNAME=ids_user
+DB_PASSWORD=change-this-password
+```
+
+### Native Installation
 
 ```bash
 composer install
 cp .env.example .env
 php artisan key:generate
-
 touch database/database.sqlite
 php artisan migrate --seed
-
 npm install
 npm run build
-
 php artisan serve
 ```
 
-If you use MySQL or PostgreSQL, configure the `DB_*` variables in `.env` and create the database before running `php artisan migrate --seed`. You do not need to create `database/database.sqlite` in that case.
+The native development panel is available at `http://localhost:8000/admin`.
 
-The application is served at `http://localhost:8000`, but the IDS interface lives inside the Filament admin panel. Open:
+## Usage Guide
+
+### Create a Basic Rule
+
+1. Open `/admin`.
+2. Navigate to **Aturan Pakar**.
+3. Select **Create**.
+4. Open **Pengaturan Dasar**.
+5. Enter the rule name, target port, minimum failed attempts, threat level, and conclusion message.
+6. Save the rule.
+
+Example:
 
 ```text
-http://localhost:8000/admin
+Rule name: SSH Brute Force
+Target port: 22
+Minimum failed attempts: 5
+Threat level: HIGH
+Conclusion: Repeated SSH authentication failures detected.
 ```
 
-The root URL `/` is the default Laravel welcome page and is not part of the IDS application.
+### Create an Advanced Rule
 
-## Default Login
+1. Open **Aturan Pakar**.
+2. Select **Create** or edit an existing rule.
+3. Open **Pengaturan Lanjutan**.
+4. Select a template or enter JSON manually.
+5. Save the rule.
 
-The database seeder creates an administrator account from the values in `config/ids.php`:
+SSH authentication burst:
 
-```text
-Email:    admin@ids.test
-Password: password
+```json
+{
+    "match_type": "regex",
+    "pattern": "/failed\\s+password/i",
+    "time_window_minutes": 5,
+    "threshold": 5
+}
 ```
 
-Change these values before deploying to production:
+SQL injection pattern:
 
-```dotenv
-IDS_ADMIN_NAME=Administrator
-IDS_ADMIN_EMAIL=admin@ids.test
-IDS_ADMIN_PASSWORD=password
+```json
+{
+    "match_type": "regex",
+    "pattern": "/(?:union\\s+select|or\\s+1\\s*=\\s*1|select\\s+.*\\s+from)/i",
+    "threshold": 1
+}
 ```
 
-Re-run `php artisan db:seed` after changing the values, or update the account directly from the database.
+Suspicious web resource:
 
-## Application Routes
+```json
+{
+    "all": [
+        {
+            "field": "target_port",
+            "operator": "in",
+            "value": [80, 443]
+        },
+        {
+            "field": "uri",
+            "operator": "regex",
+            "value": "/(?:wp-admin|\\.env|\\.git|phpmyadmin)/i"
+        }
+    ]
+}
+```
 
-| Method | URI                    | Description                                      |
-| ------ | ---------------------- | ------------------------------------------------ |
-| GET    | `/`                    | Default Laravel welcome page                     |
-| GET    | `/admin/login`         | Administrator login                              |
-| GET    | `/admin`               | Dashboard with statistics and latest results     |
-| GET    | `/admin/log-analyzer`  | Upload a log file and run the inference engine   |
-| GET    | `/admin/expert-rules`  | Manage the expert rule knowledge base            |
-| GET    | `/admin/scan-results`  | View and filter all analysis results             |
+An advanced rule referencing `message`, `uri`, or `timestamp` requires those fields to exist in the uploaded facts.
 
-## How Detection Works
+### Upload Logs
 
-1. The uploaded file is parsed into normalized fact entries: source IP, target port, and failed attempts.
-2. The inference engine loads all expert rules from the `expert_rules` table.
-3. Rules are evaluated from the strictest minimum failure count to the most lenient. The first rule whose `target_port` matches and whose `min_failed_attempts` is less than or equal to the log's failed attempts is triggered.
-4. The log entry is marked `ATTACK` and linked to the triggered rule. If no rule matches, it is marked `SAFE`.
-5. Every result is stored in the `scan_results` table and displayed on the dashboard and results page.
-
-The business logic is separated from the UI:
-
-- `app/Services/LogParser.php` — parses and validates log files.
-- `app/Services/InferenceEngine.php` — performs forward chaining.
-- `app/Actions/AnalyzeLogFile.php` — orchestrates parsing, inference, and persistence.
-
-## Supported Log Files
-
-Upload CSV, JSON, or TXT files. CSV files may include a header row or be headerless.
-
-CSV with a header:
+CSV:
 
 ```csv
-source_ip,target_port,failed_attempts
-203.0.113.10,22,8
-198.51.100.20,22,2
-```
-
-Headerless CSV (columns must be in this order: IP, port, failed attempts):
-
-```csv
-203.0.113.10,22,8
-198.51.100.20,22,2
+source_ip,target_port,failed_attempts,message,timestamp
+203.0.113.10,22,1,Failed password for admin,2026-11-10T10:00:00Z
+203.0.113.10,22,1,Failed password for root,2026-11-10T10:02:00Z
+203.0.113.10,22,1,Failed password for test,2026-11-10T10:04:00Z
 ```
 
 JSON:
@@ -118,118 +420,136 @@ JSON:
         {
             "source_ip": "203.0.113.10",
             "target_port": 22,
-            "failed_attempts": 8
+            "failed_attempts": 1,
+            "message": "Failed password for admin",
+            "timestamp": "2026-11-10T10:00:00Z"
         }
     ]
 }
 ```
 
-The parser accepts these column aliases:
+The Log Analyzer page parses the file, evaluates the facts, persists `scan_results`, and displays the classifications.
 
-| Field           | Accepted names                                                              |
-| --------------- | --------------------------------------------------------------------------- |
-| Source IP       | `source_ip`, `ip`, `src_ip`, `source`, `ip_address`, `src`                  |
-| Target port     | `target_port`, `port`, `dst_port`, `destination_port`, `dport`               |
-| Failed attempts | `failed_attempts`, `failed_count`, `failed_logins`, `failures`, `attempts`  |
+## Simulation and Testing
 
-A sample log file is available at `tests/Fixtures/logs/traffic.csv`.
+The custom Artisan command generates controlled SSH or web log samples.
 
-Upload size is limited by `IDS_MAX_UPLOAD_KB` (default: `5120`, or 5 MB).
+Generate SSH logs:
+
+```bash
+docker-compose exec app php artisan make:mock-logs ssh --lines=100
+```
+
+Generate web logs:
+
+```bash
+docker-compose exec app php artisan make:mock-logs web --lines=100
+```
+
+The files are written to:
+
+```text
+storage/logs/mock_ssh.log
+storage/logs/mock_web.log
+```
+
+The command accepts `ssh` or `web` and requires at least 15 lines:
+
+```bash
+php artisan make:mock-logs ssh --lines=50
+php artisan make:mock-logs web --lines=250
+```
+
+Inspect generated output:
+
+```bash
+docker-compose exec app sh -c 'tail -n 20 storage/logs/mock_ssh.log'
+```
+
+The generated raw SSH and web logs are simulation artifacts. For direct upload, use parser-compatible CSV or JSON containing the normalized fields required by the selected rule.
+
+Run the complete test suite:
+
+```bash
+docker-compose exec app php artisan test --compact
+```
+
+Run targeted tests:
+
+```bash
+docker-compose exec app php artisan test --compact tests/Feature/Services/InferenceEngineTest.php
+docker-compose exec app php artisan test --compact tests/Feature/Services/LogParserTest.php
+docker-compose exec app php artisan test --compact tests/Feature/Actions/AnalyzeLogFileTest.php
+```
+
+The tests cover parser validation, basic inference, advanced regular expressions, time-window thresholds, safe classifications, persistence, and Filament resource behavior.
 
 ## Database Schema
 
-### `expert_rules` — knowledge base
+### `expert_rules`
 
-| Column                | Type              | Description                                  |
-| --------------------- | ----------------- | -------------------------------------------- |
-| `id`                  | bigint, PK        | Primary key                                  |
-| `rule_name`           | string            | Rule name, e.g. "Deteksi Brute Force SSH"    |
-| `target_port`         | unsigned smallint | Monitored destination port                   |
-| `min_failed_attempts` | unsigned int      | Minimum failed attempts before triggering    |
-| `threat_level`        | string            | `LOW`, `MEDIUM`, `HIGH`, or `CRITICAL`       |
-| `conclusion_message`  | string            | Conclusion shown when the rule is triggered  |
-| `created_at`          | timestamp         | Creation time                                |
-| `updated_at`          | timestamp         | Last update time                             |
+| Column | Type | Description |
+|---|---|---|
+| `id` | bigint | Primary key |
+| `rule_name` | string | Rule name |
+| `target_port` | unsigned small integer | Basic-mode destination port |
+| `min_failed_attempts` | unsigned integer | Basic-mode threshold |
+| `threat_level` | string | Threat level |
+| `conclusion_message` | string | Rule conclusion |
+| `advanced_conditions` | nullable JSON | Advanced-mode conditions |
+| `created_at` | timestamp | Creation timestamp |
+| `updated_at` | timestamp | Update timestamp |
 
-### `scan_results` — output log
+### `scan_results`
 
-| Column              | Type              | Description                                             |
-| ------------------- | ----------------- | ------------------------------------------------------- |
-| `id`                | bigint, PK        | Primary key                                             |
-| `source_ip`         | string            | Source IP address from the log                          |
-| `target_port`       | unsigned smallint | Destination port from the log                           |
-| `failed_attempts`   | unsigned int      | Failed attempts from the log                            |
-| `status`            | string            | `SAFE` or `ATTACK`                                      |
-| `triggered_rule_id` | bigint, FK, null  | References `expert_rules.id`; null when no rule matches |
-| `created_at`        | timestamp         | Analysis time                                           |
-| `updated_at`        | timestamp         | Last update time                                        |
+| Column | Type | Description |
+|---|---|---|
+| `id` | bigint | Primary key |
+| `source_ip` | string | Source address |
+| `target_port` | unsigned small integer | Destination port |
+| `failed_attempts` | unsigned integer | Failed attempts |
+| `status` | string | `SAFE` or `ATTACK` |
+| `triggered_rule_id` | nullable foreign key | Matching expert rule |
+| `created_at` | timestamp | Analysis timestamp |
+| `updated_at` | timestamp | Update timestamp |
 
-## Project Structure
+## Application Routes
 
-```text
-app/
-├── Actions/
-│   └── AnalyzeLogFile.php
-├── Data/
-│   └── ScanSummary.php
-├── Enums/
-│   ├── ScanStatus.php
-│   └── ThreatLevel.php
-├── Exceptions/
-│   └── InvalidLogFileException.php
-├── Filament/
-│   ├── Pages/
-│   │   └── LogAnalyzer.php
-│   ├── Resources/
-│   │   ├── ExpertRules/
-│   │   └── ScanResults/
-│   └── Widgets/
-│       ├── LatestScanResults.php
-│       └── ScanStatsOverview.php
-├── Models/
-│   ├── ExpertRule.php
-│   └── ScanResult.php
-└── Services/
-    ├── InferenceEngine.php
-    └── LogParser.php
-```
+| URI | Purpose |
+|---|---|
+| `/admin/login` | Administrator authentication |
+| `/admin` | Dashboard |
+| `/admin/log-analyzer` | Log upload and analysis |
+| `/admin/expert-rules` | Expert rule management |
+| `/admin/scan-results` | Analysis result management |
 
-## Testing
-
-This project uses Pest.
+## Development Commands
 
 ```bash
+php artisan migrate
 php artisan test --compact
-```
-
-The test suite covers the log parser, inference engine, analysis action, admin panel access, rule creation and validation, result filtering, and the database seeder.
-
-## Code Style
-
-Format PHP files with Laravel Pint:
-
-```bash
 vendor/bin/pint --dirty --format agent
+npm run build
+composer run dev
 ```
 
-## Deployment Notes
+## Limitations
 
-1. Set `APP_ENV=production` and `APP_DEBUG=false`.
-2. Configure production database credentials and set a strong `IDS_ADMIN_PASSWORD`.
-3. Install dependencies and build assets:
+- The system is rule-based and does not train a statistical model.
+- Detection quality depends on the configured rules and input-field quality.
+- Advanced patterns must be valid PHP-compatible regular expressions.
+- Time-window rules require valid timestamps.
+- Missing referenced fields cause an advanced condition to fail.
+- The default Compose deployment uses SQLite and does not provision PostgreSQL automatically.
+- Generated mock logs are controlled simulation data and are not production telemetry.
 
-   ```bash
-   composer install --no-dev --optimize-autoloader
-   php artisan migrate --force
-   npm ci
-   npm run build
-   php artisan filament:assets
-   php artisan optimize
-   ```
+## Academic Scope
 
-4. Ensure `storage/` and `bootstrap/cache/` are writable by the web server.
-5. Only create administrator accounts for trusted users. The panel has no public registration page.
+This project demonstrates:
 
-## License
+- Knowledge representation through expert rules.
+- Fact normalization from semi-structured logs.
+- Deterministic Forward Chaining.
+- Dual-mode rule evaluation.
+- Separation of inference logic from presentation and persistence layers.
 
-This application is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
