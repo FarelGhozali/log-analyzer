@@ -53,3 +53,118 @@ it('triggers the strictest matching rule first', function () {
     expect($results[0]['triggered_rule_id'])->toBe($strictRule->id)
         ->and($results[0]['triggered_rule_id'])->not->toBe($lenientRule->id);
 });
+
+it('evaluates advanced regex conditions after basic conditions', function () {
+    $rule = ExpertRule::factory()->forPort(443)->create([
+        'min_failed_attempts' => 1,
+        'advanced_conditions' => [
+            'field' => 'message',
+            'operator' => 'regex',
+            'value' => '/union\s+select/i',
+        ],
+    ]);
+
+    $results = (new InferenceEngine)->analyze(
+        ExpertRule::query()->get(),
+        [[
+            'source_ip' => '203.0.113.10',
+            'target_port' => 443,
+            'failed_attempts' => 2,
+            'message' => 'UNION SELECT username FROM users',
+        ]],
+    );
+
+    expect($results[0]['triggered_rule_id'])->toBe($rule->id);
+});
+
+it('rejects a log that does not satisfy its advanced conditions', function () {
+    ExpertRule::factory()->forPort(443)->create([
+        'min_failed_attempts' => 1,
+        'advanced_conditions' => [
+            'field' => 'uri',
+            'operator' => 'regex',
+            'value' => '/(?:\.env|\.git)/i',
+        ],
+    ]);
+
+    $results = (new InferenceEngine)->analyze(
+        ExpertRule::query()->get(),
+        [[
+            'source_ip' => '203.0.113.10',
+            'target_port' => 443,
+            'failed_attempts' => 2,
+            'uri' => '/index.php',
+        ]],
+    );
+
+    expect($results[0]['triggered_rule_id'])->toBeNull()
+        ->and($results[0]['status'])->toBe(ScanStatus::Safe);
+});
+
+it('evaluates a regex rule when its threshold is met inside the time window', function () {
+    $rule = ExpertRule::factory()->forPort(80)->create([
+        'advanced_conditions' => [
+            'match_type' => 'regex',
+            'pattern' => '/failed password/i',
+            'time_window_minutes' => 5,
+            'threshold' => 2,
+        ],
+    ]);
+
+    $results = (new InferenceEngine)->analyze(
+        ExpertRule::query()->get(),
+        [
+            [
+                'source_ip' => '203.0.113.10',
+                'target_port' => 80,
+                'failed_attempts' => 1,
+                'message' => 'Failed password for user',
+                'timestamp' => '2026-11-10T10:00:00Z',
+            ],
+            [
+                'source_ip' => '203.0.113.10',
+                'target_port' => 443,
+                'failed_attempts' => 1,
+                'message' => 'FAILED PASSWORD for admin',
+                'timestamp' => '2026-11-10T10:04:00Z',
+            ],
+        ],
+    );
+
+    expect($results[1]['triggered_rule_id'])->toBe($rule->id)
+        ->and($results[1]['status'])->toBe(ScanStatus::Attack);
+});
+
+it('does not trigger a regex rule when matching events are outside the time window', function () {
+    ExpertRule::factory()->forPort(80)->create([
+        'advanced_conditions' => [
+            'match_type' => 'regex',
+            'pattern' => '/failed password/i',
+            'time_window_minutes' => 5,
+            'threshold' => 2,
+        ],
+    ]);
+
+    $results = (new InferenceEngine)->analyze(
+        ExpertRule::query()->get(),
+        [
+            [
+                'source_ip' => '203.0.113.10',
+                'target_port' => 80,
+                'failed_attempts' => 1,
+                'message' => 'Failed password for user',
+                'timestamp' => '2026-11-10T10:00:00Z',
+            ],
+            [
+                'source_ip' => '203.0.113.10',
+                'target_port' => 80,
+                'failed_attempts' => 1,
+                'message' => 'FAILED PASSWORD for admin',
+                'timestamp' => '2026-11-10T10:06:00Z',
+            ],
+        ],
+    );
+
+    expect($results[1]['triggered_rule_id'])->toBeNull()
+        ->and($results[1]['status'])->toBe(ScanStatus::Safe);
+});

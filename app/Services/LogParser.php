@@ -26,7 +26,7 @@ class LogParser
     /**
      * Parse a CSV, JSON, or plain-text log file into normalized log entries.
      *
-     * @return list<array{source_ip: string, target_port: int, failed_attempts: int}>
+     * @return list<array<string, mixed>>
      */
     public function parse(string $path): array
     {
@@ -54,7 +54,7 @@ class LogParser
     }
 
     /**
-     * @return list<array{source_ip: string, target_port: int, failed_attempts: int}>
+     * @return list<array<string, mixed>>
      */
     private function parseJson(string $contents): array
     {
@@ -90,7 +90,7 @@ class LogParser
     }
 
     /**
-     * @return list<array{source_ip: string, target_port: int, failed_attempts: int}>
+     * @return list<array<string, mixed>>
      */
     private function parseDelimited(string $contents): array
     {
@@ -154,7 +154,7 @@ class LogParser
 
     /**
      * @param  array<string, mixed>  $row
-     * @return array{source_ip: string, target_port: int, failed_attempts: int}
+     * @return array<string, mixed>
      */
     private function toEntry(array $row, string $label): array
     {
@@ -178,6 +178,11 @@ class LogParser
             'source_ip' => $sourceIp,
             'target_port' => (int) $targetPort,
             'failed_attempts' => (int) $failedAttempts,
+            ...array_diff_key($row, array_flip([
+                ...self::IP_KEYS,
+                ...self::PORT_KEYS,
+                ...self::FAILED_KEYS,
+            ])),
         ];
     }
 
