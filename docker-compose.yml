@@ -1,0 +1,51 @@
+services:
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: ids-log-analyzer:latest
+        userns_mode: host
+        environment:
+            APP_NAME: ${APP_NAME:-IDS Log Analyzer}
+            APP_ENV: ${APP_ENV:-production}
+            APP_KEY: ${APP_KEY:-}
+            APP_DEBUG: ${APP_DEBUG:-false}
+            APP_URL: ${APP_URL:-http://localhost:9000}
+            APP_LOCALE: ${APP_LOCALE:-en}
+            APP_FALLBACK_LOCALE: ${APP_FALLBACK_LOCALE:-en}
+            APP_TIMEZONE: ${APP_TIMEZONE:-UTC}
+            LOG_CHANNEL: ${LOG_CHANNEL:-stderr}
+            LOG_STACK: ${LOG_STACK:-single}
+            LOG_LEVEL: ${LOG_LEVEL:-error}
+            DB_CONNECTION: sqlite
+            DB_DATABASE: /var/www/html/database/database.sqlite
+            SESSION_DRIVER: database
+            CACHE_STORE: database
+            QUEUE_CONNECTION: database
+            FILESYSTEM_DISK: local
+            BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
+            IDS_ADMIN_NAME: ${IDS_ADMIN_NAME:-Administrator}
+            IDS_ADMIN_EMAIL: ${IDS_ADMIN_EMAIL:-admin@example.test}
+            IDS_ADMIN_PASSWORD: ${IDS_ADMIN_PASSWORD:-change-me}
+        volumes:
+            - storage_data:/var/www/html/storage:U
+            - ./database:/var/www/html/database:Z
+        healthcheck:
+            test: ["CMD", "php", "artisan", "about", "--no-ansi"]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 30s
+
+    web:
+        image: ids-log-analyzer:latest
+        entrypoint: []
+        command: ["nginx", "-g", "pid /tmp/nginx.pid; daemon off;"]
+        ports:
+            - "${APP_PORT:-9000}:8080"
+        depends_on:
+            app:
+                condition: service_healthy
+
+volumes:
+    storage_data:
