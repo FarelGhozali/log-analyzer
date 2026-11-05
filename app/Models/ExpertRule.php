@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'min_failed_attempts',
     'threat_level',
     'conclusion_message',
+    'advanced_conditions',
 ])]
 class ExpertRule extends Model
 {
@@ -30,6 +31,7 @@ class ExpertRule extends Model
             'target_port' => 'integer',
             'min_failed_attempts' => 'integer',
             'threat_level' => ThreatLevel::class,
+            'advanced_conditions' => 'array',
         ];
     }
 
