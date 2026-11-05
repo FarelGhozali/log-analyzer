@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Exceptions\InvalidLogFileException;
+use DateTimeImmutable;
+use DateTimeZone;
 use Illuminate\Support\Str;
 use JsonException;
 
@@ -50,7 +52,9 @@ class LogParser
             return $this->parseJson($contents);
         }
 
-        return $this->parseDelimited($contents);
+        return $this->looksLikeDelimitedFile($contents)
+            ? $this->parseDelimited($contents)
+            : $this->parsePlainText($contents);
     }
 
     /**
@@ -153,6 +157,98 @@ class LogParser
     }
 
     /**
+     * Parse common SSH/syslog and Apache access log lines.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function parsePlainText(string $contents): array
+    {
+        $lines = preg_split('/\R/', $contents) ?: [];
+        $entries = [];
+
+        foreach (array_values(array_filter($lines, fn (string $line): bool => trim($line) !== '')) as $index => $line) {
+            $entry = $this->parseSshLogLine($line) ?? $this->parseApacheLogLine($line);
+
+            if ($entry === null) {
+                throw new InvalidLogFileException('Format log tidak dikenali pada baris ke-'.($index + 1).'.');
+            }
+
+            $entries[] = $entry;
+        }
+
+        return $this->ensureNotEmpty($entries);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function parseSshLogLine(string $line): ?array
+    {
+        $pattern = '/^(?<month>[A-Z][a-z]{2})\s+(?<day>\d{1,2})\s+(?<time>\d{2}:\d{2}:\d{2})\s+.+?'
+            .'(?<message>Failed password|Accepted (?:password|publickey)).*?'
+            .'(?:from\s+)?(?<source_ip>(?:\d{1,3}\.){3}\d{1,3})\s+port\s+(?<target_port>\d+)/';
+
+        if (preg_match($pattern, trim($line), $matches) !== 1) {
+            return null;
+        }
+
+        $date = DateTimeImmutable::createFromFormat(
+            '!M j H:i:s Y',
+            sprintf('%s %s %s %s', $matches['month'], $matches['day'], $matches['time'], now()->year),
+            new DateTimeZone('UTC'),
+        );
+
+        if ($date === false) {
+            return null;
+        }
+
+        return $this->toEntry([
+            'source_ip' => $matches['source_ip'],
+            'target_port' => $matches['target_port'],
+            'failed_attempts' => str_starts_with($matches['message'], 'Failed') ? 1 : 0,
+            'message' => trim($line),
+            'timestamp' => $date->format(DATE_ATOM),
+            'log_file' => 'log',
+        ], 'SSH log');
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function parseApacheLogLine(string $line): ?array
+    {
+        $pattern = '/^(?<source_ip>(?:\d{1,3}\.){3}\d{1,3})\s+\S+\s+\S+\s+'
+            .'\[(?<timestamp>[^\]]+)\]\s+"(?<method>[A-Z]+)\s+(?<uri>\S+)\s+[^"]+"\s+'
+            .'(?<status>\d{3})\b/';
+
+        if (preg_match($pattern, trim($line), $matches) !== 1) {
+            return null;
+        }
+
+        $date = DateTimeImmutable::createFromFormat(
+            '!d/M/Y:H:i:s O',
+            $matches['timestamp'],
+            new DateTimeZone('UTC'),
+        );
+
+        if ($date === false) {
+            return null;
+        }
+
+        return $this->toEntry([
+            'source_ip' => $matches['source_ip'],
+            'target_port' => 80,
+            'failed_attempts' => (int) $matches['status'] >= 400 ? 1 : 0,
+            'message' => trim($line),
+            'method' => $matches['method'],
+            'uri' => $matches['uri'],
+            'status_code' => (int) $matches['status'],
+            'timestamp' => $date->format(DATE_ATOM),
+            'log_file' => 'log',
+        ], 'Apache log');
+    }
+
+    /**
      * @param  array<string, mixed>  $row
      * @return array<string, mixed>
      */
@@ -206,6 +302,15 @@ class LogParser
         $key = Str::snake(trim($key));
 
         return trim((string) preg_replace('/[^a-z0-9]+/', '_', strtolower($key)), '_');
+    }
+
+    private function looksLikeDelimitedFile(string $contents): bool
+    {
+        $firstLine = strtok($contents, "\r\n") ?: '';
+
+        return str_contains($firstLine, ',')
+            || str_contains($firstLine, ';')
+            || str_contains($firstLine, "\t");
     }
 
     private function detectDelimiter(string $line): string

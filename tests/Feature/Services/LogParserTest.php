@@ -41,6 +41,17 @@ it('parses csv files that do not have a header row', function () {
     ]);
 });
 
+it('parses SSH log files into normalized entries', function () {
+    $entries = (new LogParser)->parse(fixturePath('logs/ssh.log'));
+
+    expect($entries)->toHaveCount(3)
+        ->and($entries[0]['source_ip'])->toBe('201.43.187.77')
+        ->and($entries[0]['target_port'])->toBe(22)
+        ->and($entries[0]['failed_attempts'])->toBe(1)
+        ->and($entries[0]['message'])->toContain('Failed password')
+        ->and($entries[0]['timestamp'])->toContain('T09:57:00');
+});
+
 it('rejects a log row with an invalid ip address', function () {
     (new LogParser)->parse(fixturePath('logs/invalid-ip.csv'));
 })->throws(InvalidLogFileException::class, 'Alamat IP tidak valid pada baris ke-2.');

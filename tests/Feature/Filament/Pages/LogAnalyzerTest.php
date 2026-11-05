@@ -34,6 +34,27 @@ it('analyzes an uploaded csv file and stores the results', function () {
         ->and(ScanResult::query()->attacks()->first()?->triggered_rule_id)->toBe($rule->id);
 });
 
+it('analyzes an uploaded SSH log file and stores the results', function () {
+    $rule = ExpertRule::factory()->forPort(22)->create([
+        'min_failed_attempts' => 1,
+    ]);
+
+    Livewire::test(LogAnalyzer::class)
+        ->fillForm([
+            'log_file' => UploadedFile::fake()->createWithContent(
+                'mock_ssh.log',
+                file_get_contents(fixturePath('logs/ssh.log')),
+            ),
+        ])
+        ->call('analyze')
+        ->assertHasNoFormErrors()
+        ->assertNotified('Analisis log selesai');
+
+    expect(ScanResult::query()->count())->toBe(3)
+        ->and(ScanResult::query()->attacks()->count())->toBe(3)
+        ->and(ScanResult::query()->attacks()->first()?->triggered_rule_id)->toBe($rule->id);
+});
+
 it('refuses to analyze a log when the knowledge base is empty', function () {
     Livewire::test(LogAnalyzer::class)
         ->fillForm([

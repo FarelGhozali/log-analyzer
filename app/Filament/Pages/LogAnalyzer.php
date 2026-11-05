@@ -55,18 +55,20 @@ class LogAnalyzer extends Page
         return $schema
             ->components([
                 Section::make('Unggah File Log')
-                    ->description('File CSV atau JSON harus memiliki kolom source_ip, target_port, dan failed_attempts. File TXT dengan format serupa juga didukung.')
+                    ->description('File CSV/JSON harus memiliki kolom source_ip, target_port, dan failed_attempts. File TXT/LOG dengan format SSH atau Apache access log juga didukung.')
                     ->schema([
                         FileUpload::make('log_file')
                             ->label('File Log')
-                            ->helperText('Maksimal '.(int) (config('ids.uploads.max_size_kb') / 1024).' MB. Contoh header CSV: source_ip,target_port,failed_attempts')
+                            ->helperText('Maksimal '.(int) (config('ids.uploads.max_size_kb') / 1024).' MB. Format: CSV, JSON, SSH/syslog, atau Apache access log.')
                             ->required()
                             ->acceptedFileTypes([
                                 'text/csv',
                                 'text/plain',
+                                'text/x-log',
                                 'application/csv',
                                 'application/json',
                                 'application/vnd.ms-excel',
+                                'application/octet-stream',
                             ])
                             ->maxSize(config('ids.uploads.max_size_kb'))
                             ->storeFiles(false),
