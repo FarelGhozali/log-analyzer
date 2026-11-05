@@ -690,41 +690,104 @@ The Log Analyzer page parses the file, evaluates the facts, persists `scan_resul
 
 ## Simulation and Testing
 
-The custom Artisan command generates controlled SSH or web log samples.
+The custom Artisan command is implemented in
+[`app/Console/Commands/MakeMockLogs.php`](app/Console/Commands/MakeMockLogs.php).
+It generates controlled Linux SSH authentication logs or Nginx/Apache-style
+combined access logs for local parser and IDS testing. The command overwrites
+the existing mock file for the selected type.
 
-Generate SSH logs:
+### Command Syntax
 
-```bash
-docker-compose exec app php artisan make:mock-logs ssh --lines=100
+```text
+php artisan make:mock-logs {type} {--lines=100}
 ```
 
-Generate web logs:
+| Argument or option | Allowed values | Description |
+|---|---|---|
+| `type` | `ssh`, `web` | Selects the log format to generate. |
+| `--lines` | Integer, minimum `15` | Number of log lines to write. Defaults to `100`. |
+
+### Native Installation
+
+Run the command from the project root:
 
 ```bash
-docker-compose exec app php artisan make:mock-logs web --lines=100
+php artisan make:mock-logs ssh --lines=100
+php artisan make:mock-logs web --lines=100
 ```
 
-The files are written to:
+The generated files are available directly on the host at:
 
 ```text
 storage/logs/mock_ssh.log
 storage/logs/mock_web.log
 ```
 
-The command accepts `ssh` or `web` and requires at least 15 lines:
+### Docker or Podman Installation
+
+Run the command inside the `app` container:
 
 ```bash
-php artisan make:mock-logs ssh --lines=50
+docker-compose exec app php artisan make:mock-logs ssh --lines=100
+docker-compose exec app php artisan make:mock-logs web --lines=100
+```
+
+In the container, the files are stored at:
+
+```text
+/var/www/html/storage/logs/mock_ssh.log
+/var/www/html/storage/logs/mock_web.log
+```
+
+The Docker Compose configuration stores `/var/www/html/storage` in the
+persistent `storage_data` volume. Therefore, the generated files may not
+appear in the repository's local `storage/logs` directory. Inspect them from
+the container:
+
+```bash
+docker-compose exec app sh -c 'tail -n 20 /var/www/html/storage/logs/mock_ssh.log'
+docker-compose exec app sh -c 'wc -l /var/www/html/storage/logs/mock_ssh.log'
+```
+
+To copy a generated file from the container to the host:
+
+```bash
+docker-compose cp app:/var/www/html/storage/logs/mock_ssh.log ./storage/logs/mock_ssh.log
+```
+
+### Generated Log Content
+
+For `ssh`, the command generates standard `auth.log`-style entries, including
+successful public-key authentication and failed passwords:
+
+```text
+Oct 27 13:22:15 server sshd[1234]: Failed password for invalid user admin from 192.168.1.100 port 22 ssh2
+```
+
+For `web`, it generates standard combined access-log entries:
+
+```text
+192.0.2.10 - - [27/Oct/2026:13:22:15 +0000] "GET /login HTTP/1.1" 200 1024 "-" "Mozilla/5.0 ..."
+```
+
+Every generated file contains a guaranteed burst sequence of at least
+15 related events from one IP address within the same minute. For SSH, this is
+15 failed `admin` login attempts; for web logs, this is 15 `POST /login`
+requests returning HTTP `401`. This sequence is intended to trigger brute-force
+or threshold-based IDS rules.
+
+The command requires at least 15 lines so the burst sequence can always be
+included:
+
+```bash
+php artisan make:mock-logs ssh --lines=15
 php artisan make:mock-logs web --lines=250
 ```
 
-Inspect generated output:
-
-```bash
-docker-compose exec app sh -c 'tail -n 20 storage/logs/mock_ssh.log'
-```
-
-The generated raw SSH and web logs are simulation artifacts. For direct upload, use parser-compatible CSV or JSON containing the normalized fields required by the selected rule.
+The generated raw SSH and web logs are simulation artifacts. They are useful
+for testing log formatting and detection rules, but they are not production
+telemetry. For direct upload through the Log Analyzer, use parser-compatible
+CSV or JSON containing the normalized fields required by the selected rule.
 
 Run the complete test suite:
 
