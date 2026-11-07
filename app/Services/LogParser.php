@@ -36,25 +36,42 @@ class LogParser
             throw new InvalidLogFileException('File log tidak dapat dibaca.');
         }
 
-        $contents = file_get_contents($path);
+        $handle = fopen($path, 'rb');
 
-        if ($contents === false) {
+        if ($handle === false) {
             throw new InvalidLogFileException('File log tidak dapat dibaca.');
         }
 
-        $contents = trim(preg_replace('/^\xEF\xBB\xBF/', '', $contents) ?? '');
+        $firstLine = fgets($handle);
+        fclose($handle);
 
-        if ($contents === '') {
+        if ($firstLine === false || trim(preg_replace('/^\xEF\xBB\xBF/', '', $firstLine) ?? '') === '') {
             throw new InvalidLogFileException('File log kosong.');
         }
 
-        if (str_starts_with(ltrim($contents), '[') || str_starts_with(ltrim($contents), '{')) {
+        $firstLine = ltrim(preg_replace('/^\xEF\xBB\xBF/', '', $firstLine) ?? '');
+
+        if (str_starts_with($firstLine, '[') || str_starts_with($firstLine, '{')) {
+            $contents = file_get_contents($path);
+
+            if ($contents === false) {
+                throw new InvalidLogFileException('File log tidak dapat dibaca.');
+            }
+
             return $this->parseJson($contents);
         }
 
-        return $this->looksLikeDelimitedFile($contents)
-            ? $this->parseDelimited($contents)
-            : $this->parsePlainText($contents);
+        if ($this->looksLikeDelimitedFile($firstLine)) {
+            $contents = file_get_contents($path);
+
+            if ($contents === false) {
+                throw new InvalidLogFileException('File log tidak dapat dibaca.');
+            }
+
+            return $this->parseDelimited($contents);
+        }
+
+        return $this->parsePlainText($path);
     }
 
     /**
@@ -108,7 +125,7 @@ class LogParser
         $delimiter = $this->detectDelimiter($lines[0]);
         $headers = array_map(
             fn (string $header): string => $this->normalizeKey($header),
-            str_getcsv($lines[0], $delimiter),
+            str_getcsv($lines[0], $delimiter, '"', '\\'),
         );
         $hasHeader = $this->hasKnownColumns($headers);
 
@@ -125,7 +142,7 @@ class LogParser
         $entries = [];
 
         foreach (array_values($lines) as $offset => $line) {
-            $values = str_getcsv($line, $delimiter);
+            $values = str_getcsv($line, $delimiter, '"', '\\');
 
             if ($hasHeader) {
                 if (count($values) !== count($headers)) {
@@ -137,16 +154,10 @@ class LogParser
                 /** @var array<string, string> $row */
                 $row = array_combine($headers, $values);
             } else {
-                if (count($values) < 3) {
-                    throw new InvalidLogFileException(
-                        'Baris ke-'.($startLine + $offset).' harus memiliki minimal 3 kolom: IP, port, dan jumlah kegagalan.',
-                    );
-                }
-
                 $row = [
-                    'source_ip' => $values[0],
-                    'target_port' => $values[1],
-                    'failed_attempts' => $values[2],
+                    'source_ip' => $values[0] ?? null,
+                    'target_port' => $values[1] ?? null,
+                    'failed_attempts' => $values[2] ?? null,
                 ];
             }
 
@@ -161,22 +172,46 @@ class LogParser
      *
      * @return list<array<string, mixed>>
      */
-    private function parsePlainText(string $contents): array
+    private function parsePlainText(string $path): array
     {
-        $lines = preg_split('/\R/', $contents) ?: [];
-        $entries = [];
+        $handle = fopen($path, 'rb');
 
-        foreach (array_values(array_filter($lines, fn (string $line): bool => trim($line) !== '')) as $index => $line) {
+        if ($handle === false) {
+            throw new InvalidLogFileException('File log tidak dapat dibaca.');
+        }
+
+        $entries = [];
+        $failedAttempts = [];
+
+        while (($line = fgets($handle)) !== false) {
+            if (trim($line) === '') {
+                continue;
+            }
+
             $entry = $this->parseSshLogLine($line) ?? $this->parseApacheLogLine($line);
 
             if ($entry === null) {
-                throw new InvalidLogFileException('Format log tidak dikenali pada baris ke-'.($index + 1).'.');
+                continue;
             }
 
-            $entries[] = $entry;
+            if (($entry['failed_attempts'] ?? 0) > 0) {
+                $key = $entry['source_ip'].'|'.$entry['target_port'];
+                $failedAttempts[$key] = [
+                    'source_ip' => $entry['source_ip'],
+                    'target_port' => $entry['target_port'],
+                    'failed_attempts' => ($failedAttempts[$key]['failed_attempts'] ?? 0) + 1,
+                ];
+            } else {
+                $entries[] = $entry;
+            }
         }
 
-        return $this->ensureNotEmpty($entries);
+        fclose($handle);
+
+        return $this->ensureNotEmpty([
+            ...array_values($failedAttempts),
+            ...$entries,
+        ]);
     }
 
     /**
@@ -186,9 +221,19 @@ class LogParser
     {
         $pattern = '/^(?<month>[A-Z][a-z]{2})\s+(?<day>\d{1,2})\s+(?<time>\d{2}:\d{2}:\d{2})\s+.+?'
             .'(?<message>Failed password|Accepted (?:password|publickey)).*?'
-            .'(?:from\s+)?(?<source_ip>(?:\d{1,3}\.){3}\d{1,3})\s+port\s+(?<target_port>\d+)/';
+            .'(?:from\s+)?(?<source_ip>(?:\d{1,3}\.){3}\d{1,3})\s+port\s+(?<target_port>\d+)/i';
+        $authenticationFailurePattern = '/^(?<month>[A-Z][a-z]{2})\s+(?<day>\d{1,2})\s+(?<time>\d{2}:\d{2}:\d{2})\s+.+?'
+            .'authentication failure;.*?\brhost=(?<source_ip>(?:\d{1,3}\.){3}\d{1,3})\b/i';
 
-        if (preg_match($pattern, trim($line), $matches) !== 1) {
+        $matched = preg_match($pattern, trim($line), $matches) === 1;
+
+        if (! $matched && preg_match($authenticationFailurePattern, trim($line), $matches) === 1) {
+            $matches['message'] = 'Failed authentication';
+            $matches['target_port'] = '22';
+            $matched = true;
+        }
+
+        if (! $matched) {
             return null;
         }
 
@@ -307,10 +352,32 @@ class LogParser
     private function looksLikeDelimitedFile(string $contents): bool
     {
         $firstLine = strtok($contents, "\r\n") ?: '';
+        $delimiterCounts = [
+            ',' => substr_count($firstLine, ','),
+            ';' => substr_count($firstLine, ';'),
+            "\t" => substr_count($firstLine, "\t"),
+        ];
+        arsort($delimiterCounts);
+        $delimiter = array_key_first($delimiterCounts);
 
-        return str_contains($firstLine, ',')
-            || str_contains($firstLine, ';')
-            || str_contains($firstLine, "\t");
+        if ($delimiter === null || $delimiterCounts[$delimiter] === 0) {
+            return false;
+        }
+
+        $rawColumns = str_getcsv($firstLine, $delimiter, '"', '\\');
+        $columns = array_map(
+            fn (string $column): string => $this->normalizeKey($column),
+            $rawColumns,
+        );
+
+        if ($this->hasAnyKnownColumn($columns)) {
+            return true;
+        }
+
+        return count($rawColumns) >= 3
+            && filter_var(trim($rawColumns[0]), FILTER_VALIDATE_IP) !== false
+            && is_numeric(trim($rawColumns[1]))
+            && is_numeric(trim($rawColumns[2]));
     }
 
     private function detectDelimiter(string $line): string

@@ -50,8 +50,8 @@ it('analyzes an uploaded SSH log file and stores the results', function () {
         ->assertHasNoFormErrors()
         ->assertNotified('Analisis log selesai');
 
-    expect(ScanResult::query()->count())->toBe(3)
-        ->and(ScanResult::query()->attacks()->count())->toBe(3)
+    expect(ScanResult::query()->count())->toBe(1)
+        ->and(ScanResult::query()->attacks()->count())->toBe(1)
         ->and(ScanResult::query()->attacks()->first()?->triggered_rule_id)->toBe($rule->id);
 });
 
