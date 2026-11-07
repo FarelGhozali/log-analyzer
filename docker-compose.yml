@@ -25,8 +25,8 @@ services:
             FILESYSTEM_DISK: local
             BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
             IDS_ADMIN_NAME: ${IDS_ADMIN_NAME:-Administrator}
-            IDS_ADMIN_EMAIL: ${IDS_ADMIN_EMAIL:-admin@example.test}
-            IDS_ADMIN_PASSWORD: ${IDS_ADMIN_PASSWORD:-change-me}
+            IDS_ADMIN_EMAIL: ${IDS_ADMIN_EMAIL:-admin@ids.test}
+            IDS_ADMIN_PASSWORD: ${IDS_ADMIN_PASSWORD:-password}
         volumes:
             - storage_data:/var/www/html/storage:U
             - ./database:/var/www/html/database:Z
