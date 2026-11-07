@@ -526,10 +526,10 @@ docker-compose logs -f app
 docker-compose logs -f web
 ```
 
-Run migrations:
+Run migrations and seed the database:
 
 ```bash
-docker-compose exec app php artisan migrate --force
+docker-compose exec app php artisan migrate --seed --force
 ```
 
 Stop the deployment:
@@ -642,7 +642,7 @@ Suspicious web resource:
 
 ```json
 {
-    "all": [
+    "all": [change-this-password
         {
             "field": "target_port",
             "operator": "in",
