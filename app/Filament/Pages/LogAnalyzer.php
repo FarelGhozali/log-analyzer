@@ -103,7 +103,10 @@ class LogAnalyzer extends Page
         }
 
         try {
-            $summary = $this->analyzeLogFile->handle($file->getRealPath());
+            $summary = $this->analyzeLogFile->handle(
+                $file->getRealPath(),
+                $file->getClientOriginalName(),
+            );
         } catch (InvalidLogFileException $exception) {
             Notification::make()
                 ->danger()

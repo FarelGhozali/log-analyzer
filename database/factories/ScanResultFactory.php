@@ -20,6 +20,7 @@ class ScanResultFactory extends Factory
     public function definition(): array
     {
         return [
+            'log_file_name' => 'test.log',
             'source_ip' => fake()->ipv4(),
             'target_port' => 22,
             'failed_attempts' => 1,

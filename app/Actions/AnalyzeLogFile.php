@@ -5,6 +5,7 @@ namespace App\Actions;
 use App\Data\ScanSummary;
 use App\Enums\ScanStatus;
 use App\Models\ExpertRule;
+use App\Models\ScanBatch;
 use App\Models\ScanResult;
 use App\Services\InferenceEngine;
 use App\Services\LogParser;
@@ -18,22 +19,30 @@ class AnalyzeLogFile
         private InferenceEngine $engine,
     ) {}
 
-    public function handle(string $path): ScanSummary
+    public function handle(string $path, ?string $fileName = null): ScanSummary
     {
         $logs = $this->parser->parse($path);
         $analysis = $this->engine->analyze(ExpertRule::query()->get(), $logs);
         $attackCount = collect($analysis)
             ->where('status', ScanStatus::Attack)
             ->count();
+        $scanBatch = ScanBatch::query()->create([
+            'log_file_name' => $fileName ?? 'File tidak diketahui',
+            'total_results' => count($analysis),
+            'attack_count' => $attackCount,
+            'safe_count' => count($analysis) - $attackCount,
+        ]);
 
-        DB::transaction(function () use ($analysis): void {
+        DB::transaction(function () use ($analysis, $fileName, $scanBatch): void {
             $timestamp = now();
 
             collect($analysis)
                 ->chunk(500)
-                ->each(function (Collection $chunk) use ($timestamp): void {
+                ->each(function (Collection $chunk) use ($timestamp, $fileName, $scanBatch): void {
                     ScanResult::query()->insert(
                         $chunk->map(fn (array $result): array => [
+                            'log_file_name' => $fileName,
+                            'scan_batch_id' => $scanBatch->id,
                             'source_ip' => $result['source_ip'],
                             'target_port' => $result['target_port'],
                             'failed_attempts' => $result['failed_attempts'],

@@ -29,6 +29,10 @@ class LatestScanResults extends TableWidget
                 ->limit(10))
             ->heading('Hasil Pemindaian Terbaru')
             ->columns([
+                TextColumn::make('log_file_name')
+                    ->label('File Log')
+                    ->placeholder('Tidak diketahui')
+                    ->copyable(),
                 TextColumn::make('source_ip')
                     ->label('IP Sumber')
                     ->copyable(),

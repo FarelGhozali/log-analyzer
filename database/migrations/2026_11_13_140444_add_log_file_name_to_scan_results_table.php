@@ -1,0 +1,29 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('scan_results', function (Blueprint $table): void {
+            $table->string('log_file_name')->nullable()->after('id')->index();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('scan_results', function (Blueprint $table): void {
+            $table->dropIndex(['log_file_name']);
+            $table->dropColumn('log_file_name');
+        });
+    }
+};

@@ -51,6 +51,7 @@ it('analyzes an uploaded SSH log file and stores the results', function () {
         ->assertNotified('Analisis log selesai');
 
     expect(ScanResult::query()->count())->toBe(1)
+        ->and(ScanResult::query()->first()?->log_file_name)->toBe('mock_ssh.log')
         ->and(ScanResult::query()->attacks()->count())->toBe(1)
         ->and(ScanResult::query()->attacks()->first()?->triggered_rule_id)->toBe($rule->id);
 });

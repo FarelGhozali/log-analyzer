@@ -13,7 +13,11 @@ use UnitEnum;
 
 class ScanResultResource extends Resource
 {
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $model = ScanResult::class;
+
+    protected static ?string $slug = 'scan-result-details';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldExclamation;
 

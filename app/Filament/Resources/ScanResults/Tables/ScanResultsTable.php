@@ -19,6 +19,12 @@ class ScanResultsTable
     {
         return $table
             ->columns([
+                TextColumn::make('log_file_name')
+                    ->label('File Log')
+                    ->searchable()
+                    ->sortable()
+                    ->placeholder('Tidak diketahui')
+                    ->copyable(),
                 TextColumn::make('source_ip')
                     ->label('IP Sumber')
                     ->searchable()

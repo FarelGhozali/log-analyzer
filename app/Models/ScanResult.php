@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'source_ip',
+    'log_file_name',
+    'scan_batch_id',
     'target_port',
     'failed_attempts',
     'status',
@@ -41,6 +43,14 @@ class ScanResult extends Model
     public function triggeredRule(): BelongsTo
     {
         return $this->belongsTo(ExpertRule::class, 'triggered_rule_id');
+    }
+
+    /**
+     * @return BelongsTo<ScanBatch, $this>
+     */
+    public function scanBatch(): BelongsTo
+    {
+        return $this->belongsTo(ScanBatch::class);
     }
 
     #[Scope]
