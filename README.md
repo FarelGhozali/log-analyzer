@@ -558,8 +558,8 @@ APP_TIMEZONE=UTC
 APP_PORT=9000
 
 IDS_ADMIN_NAME=Administrator
-IDS_ADMIN_EMAIL=admin@example.test
-IDS_ADMIN_PASSWORD=change-this-password
+IDS_ADMIN_EMAIL=admin@ids.test
+IDS_ADMIN_PASSWORD=password
 ```
 
 To use PostgreSQL, configure the Laravel database variables and provide a PostgreSQL service separately:
@@ -587,6 +587,12 @@ php artisan serve
 ```
 
 The native development panel is available at `http://localhost:8000/admin`.
+
+Default admin credentials configured in `.env.example`:
+- **Email:** `admin@ids.test`
+- **Password:** `password`
+
+*(Note: If you customize `IDS_ADMIN_EMAIL` or `IDS_ADMIN_PASSWORD` in `.env`, run `php artisan db:seed` to update the admin account).*
 
 ## Usage Guide
 
@@ -642,7 +648,7 @@ Suspicious web resource:
 
 ```json
 {
-    "all": [change-this-password
+    "all": [
         {
             "field": "target_port",
             "operator": "in",
