@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ScanBatches\Tables;
 use App\Filament\Resources\ScanBatches\ScanBatchResource;
 use App\Models\ScanBatch;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -49,6 +50,13 @@ class ScanBatchesTable
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),
+            ])
+            ->recordActions([
+                DeleteAction::make()
+                    ->label('Hapus Sesi')
+                    ->modalHeading('Hapus sesi analisis?')
+                    ->modalDescription('Sesi dan seluruh hasil analisis di dalamnya akan dihapus permanen dari database.')
+                    ->successNotificationTitle('Sesi analisis dihapus permanen'),
             ])
             ->defaultSort('created_at', 'desc')
             ->emptyStateHeading('Belum ada hasil analisis')

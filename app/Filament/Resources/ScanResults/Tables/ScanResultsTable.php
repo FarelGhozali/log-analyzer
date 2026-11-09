@@ -6,6 +6,7 @@ use App\Enums\ScanStatus;
 use App\Filament\Resources\ExpertRules\ExpertRuleResource;
 use App\Models\ScanResult;
 use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
@@ -76,6 +77,11 @@ class ScanResultsTable
             ])
             ->recordActions([
                 ViewAction::make(),
+                DeleteAction::make()
+                    ->label('Hapus')
+                    ->modalHeading('Hapus hasil analisis?')
+                    ->modalDescription('Hasil analisis ini akan dihapus permanen dari database.')
+                    ->successNotificationTitle('Hasil analisis dihapus permanen'),
             ])
             ->defaultSort('created_at', 'desc')
             ->emptyStateHeading('Belum ada hasil analisis')

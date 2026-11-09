@@ -78,3 +78,28 @@ it('opens an analysis result with explanation evidence and mitigation', function
         ->assertSee('Ditemukan 8 percobaan gagal')
         ->assertSee('Blokir IP dengan UFW.');
 });
+
+it('permanently deletes an individual analysis result', function () {
+    $result = ScanResult::factory()->create();
+
+    Livewire::test(ListScanResults::class)
+        ->callTableAction('delete', $result)
+        ->assertSuccessful();
+
+    $this->assertDatabaseMissing('scan_results', ['id' => $result->id]);
+});
+
+it('permanently deletes a batch and all of its analysis results', function () {
+    $batch = ScanBatch::factory()->create();
+    $results = ScanResult::factory()->count(2)->create([
+        'scan_batch_id' => $batch->id,
+    ]);
+
+    Livewire::test(ListScanBatches::class)
+        ->callTableAction('delete', $batch)
+        ->assertSuccessful();
+
+    $this->assertDatabaseMissing('scan_batches', ['id' => $batch->id]);
+    $this->assertDatabaseMissing('scan_results', ['id' => $results[0]->id]);
+    $this->assertDatabaseMissing('scan_results', ['id' => $results[1]->id]);
+});
