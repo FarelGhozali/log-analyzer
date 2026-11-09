@@ -69,6 +69,41 @@ class ExpertRuleConditionTemplates
                     'value' => '/failed\\s+(?:password|login|authentication)/i',
                 ],
             ],
+            'ftp_root_session' => [
+                'label' => 'FTP root session',
+                'conditions' => [
+                    'all' => [
+                        ['field' => 'service_name', 'operator' => 'equals', 'value' => 'ftp'],
+                        ['field' => 'username', 'operator' => 'equals', 'value' => 'root'],
+                    ],
+                ],
+            ],
+            'ftp_sensitive_exfiltration' => [
+                'label' => 'FTP sensitive file exfiltration',
+                'conditions' => [
+                    'all' => [
+                        ['field' => 'direction', 'operator' => 'equals', 'value' => 'o'],
+                        ['field' => 'filename', 'operator' => 'regex', 'value' => '/(?:^|\/)(?:etc\/(?:passwd|shadow)|root\/anaconda-ks\.cfg|\.ssh\/.*|\.env(?:$|\/.*)|[^\/]+\.(?:db|sql))$/i'],
+                    ],
+                ],
+            ],
+            'ftp_malicious_upload' => [
+                'label' => 'FTP malicious upload',
+                'conditions' => [
+                    'all' => [
+                        ['field' => 'direction', 'operator' => 'equals', 'value' => 'i'],
+                        ['field' => 'filename', 'operator' => 'regex', 'value' => '/(?:^\/(?:root|usr|etc|var\/www)\/|\\.(?:exe|dll|vbs|sh|php|py|so)$)/i'],
+                    ],
+                ],
+            ],
+            'ftp_burst' => [
+                'label' => 'FTP high-frequency burst',
+                'conditions' => [
+                    'match_type' => 'ftp_burst',
+                    'threshold' => 10,
+                    'window_seconds' => 5,
+                ],
+            ],
         ];
     }
 

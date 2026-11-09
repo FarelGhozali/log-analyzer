@@ -112,7 +112,7 @@ The minimum normalized structure is:
 }
 ```
 
-Additional JSON or CSV fields are retained for advanced evaluation:
+Additional JSON, CSV, and vsftpd xferlog fields are retained for advanced evaluation:
 
 ```json
 {
@@ -125,6 +125,8 @@ Additional JSON or CSV fields are retained for advanced evaluation:
     "log_file": "auth.log"
 }
 ```
+
+Standard vsftpd xferlog lines are auto-detected. The parser normalizes the remote host, preserves the complete transfer facts, and supports rules for privileged root sessions, sensitive-file exfiltration, malicious uploads, and completed high-frequency bursts.
 
 Supported aliases include:
 

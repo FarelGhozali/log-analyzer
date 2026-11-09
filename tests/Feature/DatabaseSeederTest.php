@@ -7,5 +7,5 @@ it('creates the configured admin account and the default knowledge base', functi
     $this->seed();
 
     expect(User::query()->where('email', config('ids.admin.email'))->exists())->toBeTrue()
-        ->and(ExpertRule::query()->count())->toBe(5);
+        ->and(ExpertRule::query()->count())->toBe(8);
 });

@@ -26,6 +26,17 @@ class ScanResultInfolist
                 TextEntry::make('failed_attempts')
                     ->label('Percobaan Gagal Aktual')
                     ->numeric(),
+                TextEntry::make('fact_snapshot.username')
+                    ->label('Akun FTP')
+                    ->placeholder('-'),
+                TextEntry::make('fact_snapshot.direction')
+                    ->label('Arah Transfer')
+                    ->placeholder('-'),
+                TextEntry::make('fact_snapshot.filename')
+                    ->label('Nama File Transfer')
+                    ->placeholder('-')
+                    ->copyable()
+                    ->columnSpanFull(),
                 TextEntry::make('event_timestamp')
                     ->label('Timestamp Kejadian')
                     ->dateTime('d M Y H:i:s')
@@ -40,6 +51,10 @@ class ScanResultInfolist
                 TextEntry::make('triggeredRule.min_failed_attempts')
                     ->label('Ambang Batas Minimal Aturan')
                     ->numeric()
+                    ->placeholder('-'),
+                TextEntry::make('triggeredRule.threat_level')
+                    ->label('Tingkat Keparahan')
+                    ->badge()
                     ->placeholder('-'),
                 TextEntry::make('explanation.comparison')
                     ->label('Perbandingan Fakta vs Aturan')

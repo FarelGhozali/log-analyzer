@@ -3,6 +3,7 @@
 use App\Enums\ScanStatus;
 use App\Models\ExpertRule;
 use App\Services\InferenceEngine;
+use App\Services\LogParser;
 
 it('marks a log as an attack when a rule matches its port and failure threshold', function () {
     $rule = ExpertRule::factory()->forPort(22)->create([
@@ -168,3 +169,91 @@ it('does not trigger a regex rule when matching events are outside the time wind
     expect($results[1]['triggered_rule_id'])->toBeNull()
         ->and($results[1]['status'])->toBe(ScanStatus::Safe);
 });
+
+it('detects a privileged root FTP session from xferlog facts', function () {
+    $rule = ExpertRule::factory()->forPort(21)->create([
+        'advanced_conditions' => [
+            'all' => [
+                ['field' => 'service_name', 'operator' => 'equals', 'value' => 'ftp'],
+                ['field' => 'username', 'operator' => 'equals', 'value' => 'root'],
+            ],
+        ],
+    ]);
+    $logs = (new LogParser)->parse(fixturePath('logs/ftp-xferlog.log'));
+
+    $results = (new InferenceEngine)->analyze(ExpertRule::query()->get(), [$logs[0]]);
+
+    expect($results[0]['triggered_rule_id'])->toBe($rule->id)
+        ->and($results[0]['fact_snapshot']['filename'])->toBe('/root/anaconda-ks.cfg')
+        ->and($results[0]['raw_log_snippets'])->toHaveCount(1);
+});
+
+it('detects a high-frequency completed FTP burst within five seconds', function () {
+    $rule = ExpertRule::factory()->forPort(21)->create([
+        'advanced_conditions' => [
+            'match_type' => 'ftp_burst',
+            'threshold' => 10,
+            'window_seconds' => 5,
+        ],
+    ]);
+    $logs = array_map(
+        fn (int $second): array => [
+            'source_ip' => '192.168.203.1',
+            'target_port' => 21,
+            'failed_attempts' => 0,
+            'remote_host' => '192.168.203.1',
+            'service_name' => 'ftp',
+            'completion_status' => 'c',
+            'timestamp' => sprintf('2021-02-28T14:21:%02d+00:00', 50 + intdiv($second, 2)),
+            'raw_log' => 'xferlog burst '.$second,
+        ],
+        range(0, 9),
+    );
+
+    $results = (new InferenceEngine)->analyze(ExpertRule::query()->get(), $logs);
+
+    expect($results[9]['triggered_rule_id'])->toBe($rule->id)
+        ->and($results[9]['status'])->toBe(ScanStatus::Attack);
+});
+
+it('detects sensitive FTP exfiltration and malicious uploads', function (array $ruleConditions, array $log) {
+    $rule = ExpertRule::factory()->forPort(21)->create([
+        'advanced_conditions' => $ruleConditions,
+    ]);
+
+    $results = (new InferenceEngine)->analyze(ExpertRule::query()->get(), [$log]);
+
+    expect($results[0]['triggered_rule_id'])->toBe($rule->id)
+        ->and($results[0]['fact_snapshot']['filename'])->toBe($log['filename']);
+})->with([
+    'sensitive exfiltration' => [
+        [
+            'all' => [
+                ['field' => 'direction', 'operator' => 'equals', 'value' => 'o'],
+                ['field' => 'filename', 'operator' => 'regex', 'value' => '/(?:^|\/)(?:etc\/(?:passwd|shadow)|root\/anaconda-ks\.cfg|\.ssh\/.*|\.env(?:$|\/.*)|[^\/]+\.(?:db|sql))$/i'],
+            ],
+        ],
+        [
+            'source_ip' => '192.168.203.1',
+            'target_port' => 21,
+            'failed_attempts' => 0,
+            'direction' => 'o',
+            'filename' => '/home/admin/.ssh/id_rsa',
+        ],
+    ],
+    'malicious upload' => [
+        [
+            'all' => [
+                ['field' => 'direction', 'operator' => 'equals', 'value' => 'i'],
+                ['field' => 'filename', 'operator' => 'regex', 'value' => '/(?:^\/(?:root|usr|etc|var\/www)\/|\\.(?:exe|dll|vbs|sh|php|py|so)$)/i'],
+            ],
+        ],
+        [
+            'source_ip' => '192.168.203.1',
+            'target_port' => 21,
+            'failed_attempts' => 0,
+            'direction' => 'i',
+            'filename' => '/var/www/html/shell.php',
+        ],
+    ],
+]);

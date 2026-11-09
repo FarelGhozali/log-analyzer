@@ -50,6 +50,32 @@ it('parses SSH log files into normalized entries', function () {
         ->and($entries[0]['failed_attempts'])->toBe(3);
 });
 
+it('parses vsftpd xferlog entries and normalizes mapped IPv4 addresses', function () {
+    $entries = (new LogParser)->parse(fixturePath('logs/ftp-xferlog.log'));
+
+    expect($entries)->toHaveCount(3)
+        ->and($entries[0])->toMatchArray([
+            'source_ip' => '192.168.203.1',
+            'target_port' => 21,
+            'failed_attempts' => 0,
+            'transfer_time' => 1,
+            'remote_host' => '192.168.203.1',
+            'file_size' => 850,
+            'filename' => '/root/anaconda-ks.cfg',
+            'transfer_type' => 'b',
+            'special_action_flag' => '_',
+            'direction' => 'o',
+            'access_mode' => 'r',
+            'username' => 'root',
+            'service_name' => 'ftp',
+            'authentication_method' => '0',
+            'authenticated_user_id' => '*',
+            'completion_status' => 'c',
+        ])
+        ->and($entries[1]['timestamp'])->toBe('2021-03-05T17:25:30+00:00')
+        ->and($entries[2]['filename'])->toBe('/root/\\xE6\\x96\\x87\\xE6\\xA1\\xA3/.cdk/2.19.session');
+});
+
 it('rejects a log row with an invalid ip address', function () {
     (new LogParser)->parse(fixturePath('logs/invalid-ip.csv'));
 })->throws(InvalidLogFileException::class, 'Alamat IP tidak valid pada baris ke-2.');

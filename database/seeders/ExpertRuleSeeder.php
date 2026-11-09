@@ -23,12 +23,59 @@ class ExpertRuleSeeder extends Seeder
                 'mitigation_recommendation' => 'Blokir IP sumber dengan UFW atau iptables dan aktifkan Fail2Ban untuk SSH.',
             ],
             [
-                'rule_name' => 'Deteksi Serangan FTP',
+                'rule_name' => 'Penyalahgunaan Akses Root via FTP',
                 'target_port' => 21,
-                'min_failed_attempts' => 5,
+                'min_failed_attempts' => 1,
+                'threat_level' => ThreatLevel::Critical,
+                'conclusion_message' => 'Akses root berisiko tinggi melalui layanan FTP terdeteksi!',
+                'mitigation_recommendation' => 'Nonaktifkan login root dan akses anonymous pada vsftpd, lalu batasi FTP berdasarkan IP yang diizinkan.',
+                'advanced_conditions' => [
+                    'all' => [
+                        ['field' => 'service_name', 'operator' => 'equals', 'value' => 'ftp'],
+                        ['field' => 'username', 'operator' => 'equals', 'value' => 'root'],
+                    ],
+                ],
+            ],
+            [
+                'rule_name' => 'Eksfiltrasi File Sensitif via FTP',
+                'target_port' => 21,
+                'min_failed_attempts' => 1,
+                'threat_level' => ThreatLevel::Critical,
+                'conclusion_message' => 'Eksfiltrasi data atau konfigurasi sensitif via FTP terdeteksi!',
+                'mitigation_recommendation' => 'Blokir transfer keluar yang tidak sah, batasi akses direktori sensitif, dan rotasi kredensial yang terekspos.',
+                'advanced_conditions' => [
+                    'all' => [
+                        ['field' => 'direction', 'operator' => 'equals', 'value' => 'o'],
+                        ['field' => 'filename', 'operator' => 'regex', 'value' => '/(?:^|\/)(?:etc\/(?:passwd|shadow)|root\/anaconda-ks\.cfg|\.ssh\/.*|\.env(?:$|\/.*)|[^\/]+\.(?:db|sql))$/i'],
+                    ],
+                ],
+            ],
+            [
+                'rule_name' => 'Upload Malware via FTP',
+                'target_port' => 21,
+                'min_failed_attempts' => 1,
+                'threat_level' => ThreatLevel::Critical,
+                'conclusion_message' => 'Injeksi file berbahaya atau staging malware via FTP terdeteksi!',
+                'mitigation_recommendation' => 'Blokir upload ke direktori sistem, karantina file, dan lakukan pemindaian malware pada server.',
+                'advanced_conditions' => [
+                    'all' => [
+                        ['field' => 'direction', 'operator' => 'equals', 'value' => 'i'],
+                        ['field' => 'filename', 'operator' => 'regex', 'value' => '/(?:^\/(?:root|usr|etc|var\/www)\/|\\.(?:exe|dll|vbs|sh|php|py|so)$)/i'],
+                    ],
+                ],
+            ],
+            [
+                'rule_name' => 'Transfer FTP Otomatis Berfrekuensi Tinggi',
+                'target_port' => 21,
+                'min_failed_attempts' => 1,
                 'threat_level' => ThreatLevel::High,
-                'conclusion_message' => 'Upaya akses paksa FTP terdeteksi!',
-                'mitigation_recommendation' => 'Batasi akses FTP berdasarkan IP yang diizinkan dan nonaktifkan autentikasi anonim.',
+                'conclusion_message' => 'Transfer FTP massal otomatis terdeteksi dalam rentang waktu singkat!',
+                'mitigation_recommendation' => 'Terapkan rate limiting, batasi jumlah transfer per IP, dan blokir host yang melakukan burst mencurigakan.',
+                'advanced_conditions' => [
+                    'match_type' => 'ftp_burst',
+                    'threshold' => 10,
+                    'window_seconds' => 5,
+                ],
             ],
             [
                 'rule_name' => 'Deteksi Login Web Berulang HTTP',

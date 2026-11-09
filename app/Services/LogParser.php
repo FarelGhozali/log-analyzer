@@ -189,13 +189,15 @@ class LogParser
                 continue;
             }
 
-            $entry = $this->parseSshLogLine($line) ?? $this->parseApacheLogLine($line);
+            $entry = $this->parseXferlogLine($line)
+                ?? $this->parseSshLogLine($line)
+                ?? $this->parseApacheLogLine($line);
 
             if ($entry === null) {
                 continue;
             }
 
-            if (($entry['failed_attempts'] ?? 0) > 0) {
+            if (($entry['failed_attempts'] ?? 0) > 0 && ! isset($entry['service_name'])) {
                 $key = $entry['source_ip'].'|'.$entry['target_port'];
                 $failedAttempts[$key] = [
                     'source_ip' => $entry['source_ip'],
@@ -218,6 +220,75 @@ class LogParser
             ...array_values($failedAttempts),
             ...$entries,
         ]);
+    }
+
+    /**
+     * Parse a standard vsftpd xferlog line.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function parseXferlogLine(string $line): ?array
+    {
+        $pattern = '/^(?<weekday>Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+'
+            .'(?<month>Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+'
+            .'(?<day>\d{1,2})\s+(?<time>\d{2}:\d{2}:\d{2})\s+(?<year>\d{4})\s+'
+            .'(?<transfer_time>\d+)\s+(?<remote_host>\S+)\s+(?<file_size>\d+)\s+'
+            .'(?<filename>.+?)\s+(?<transfer_type>[ab])\s+'
+            .'(?<special_action_flag>[_CUT])\s+(?<direction>[oi])\s+'
+            .'(?<access_mode>[rag])\s+(?<username>\S+)\s+(?<service_name>\S+)\s+'
+            .'(?<authentication_method>\S+)\s+(?<authenticated_user_id>\S+)\s+'
+            .'(?<completion_status>[ci])$/i';
+
+        if (preg_match($pattern, trim($line), $matches) !== 1) {
+            return null;
+        }
+
+        $date = DateTimeImmutable::createFromFormat(
+            '!D M j H:i:s Y',
+            sprintf(
+                '%s %s %s %s %s',
+                $matches['weekday'],
+                $matches['month'],
+                $matches['day'],
+                $matches['time'],
+                $matches['year'],
+            ),
+            new DateTimeZone('UTC'),
+        );
+
+        if ($date === false) {
+            throw new InvalidLogFileException('Timestamp xferlog tidak valid.');
+        }
+
+        $remoteHost = $this->normalizeRemoteHost($matches['remote_host']);
+
+        return $this->toEntry([
+            'source_ip' => $remoteHost,
+            'target_port' => 21,
+            'failed_attempts' => 0,
+            'timestamp' => $date->format(DATE_ATOM),
+            'transfer_time' => (int) $matches['transfer_time'],
+            'remote_host' => $remoteHost,
+            'file_size' => (int) $matches['file_size'],
+            'filename' => $matches['filename'],
+            'transfer_type' => strtolower($matches['transfer_type']),
+            'special_action_flag' => $matches['special_action_flag'],
+            'direction' => strtolower($matches['direction']),
+            'access_mode' => strtolower($matches['access_mode']),
+            'username' => $matches['username'],
+            'service_name' => $matches['service_name'],
+            'authentication_method' => $matches['authentication_method'],
+            'authenticated_user_id' => $matches['authenticated_user_id'],
+            'completion_status' => strtolower($matches['completion_status']),
+            'raw_log' => trim($line),
+        ], 'xferlog');
+    }
+
+    private function normalizeRemoteHost(string $remoteHost): string
+    {
+        $normalized = preg_replace('/^::ffff:/i', '', trim($remoteHost));
+
+        return is_string($normalized) ? $normalized : trim($remoteHost);
     }
 
     /**

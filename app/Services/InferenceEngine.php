@@ -47,10 +47,14 @@ class InferenceEngine
 
             if ($triggeredRule !== null) {
                 $result['fact_snapshot'] = [
-                    'source_ip' => $log['source_ip'] ?? null,
-                    'target_port' => $log['target_port'] ?? null,
-                    'failed_attempts' => $log['failed_attempts'] ?? null,
-                    'timestamp' => $log['timestamp'] ?? null,
+                    ...array_diff_key($log, array_flip([
+                        'raw_log',
+                        'raw_log_snippets',
+                        'fact_snapshot',
+                        'explanation',
+                        'status',
+                        'triggered_rule_id',
+                    ])),
                 ];
                 $result['raw_log_snippets'] = $this->evidenceForRule($triggeredRule, $log, $logs);
                 $result['explanation'] = $this->buildExplanation($triggeredRule, $log, $logs);
@@ -71,8 +75,11 @@ class InferenceEngine
         $conditions = $rule->advanced_conditions;
         $isRegexRule = $conditions !== null
             && ($conditions['match_type'] ?? null) === 'regex';
+        $isFtpBurstRule = $conditions !== null
+            && ($conditions['match_type'] ?? null) === 'ftp_burst';
         $windowStart = null;
         $logTimestamp = $this->parseTimestamp($log['timestamp'] ?? null);
+        $windowSeconds = $conditions['window_seconds'] ?? null;
 
         if ($isRegexRule
             && $logTimestamp !== null
@@ -80,6 +87,13 @@ class InferenceEngine
             && is_numeric($conditions['time_window_minutes'])
             && (int) $conditions['time_window_minutes'] >= 0) {
             $windowStart = $logTimestamp->subMinutes((int) $conditions['time_window_minutes']);
+        }
+
+        if ($isFtpBurstRule
+            && $logTimestamp !== null
+            && is_numeric($windowSeconds)
+            && (int) $windowSeconds >= 0) {
+            $windowStart = $logTimestamp->subSeconds((int) $windowSeconds);
         }
 
         foreach ($logs as $candidate) {
@@ -97,6 +111,13 @@ class InferenceEngine
                 continue;
             }
 
+            if ($conditions !== null
+                && ! $isRegexRule
+                && ! $isFtpBurstRule
+                && ! $this->matchesAdvancedConditions($rule, $candidate)) {
+                continue;
+            }
+
             if ($windowStart !== null) {
                 $candidateTimestamp = $this->parseTimestamp($candidate['timestamp'] ?? null);
 
@@ -105,6 +126,13 @@ class InferenceEngine
                     || ! $candidateTimestamp->betweenIncluded($windowStart, $logTimestamp)) {
                     continue;
                 }
+            }
+
+            if ($isFtpBurstRule
+                && (($candidate['remote_host'] ?? $candidate['source_ip'] ?? null)
+                    !== ($log['remote_host'] ?? $log['source_ip'] ?? null)
+                    || ($candidate['completion_status'] ?? null) !== 'c')) {
+                continue;
             }
 
             $snippets = $candidate['raw_log_snippets'] ?? [$candidate['raw_log'] ?? null];
@@ -147,10 +175,14 @@ class InferenceEngine
                 'advanced_conditions' => $rule->advanced_conditions,
             ],
             'facts' => [
-                'source_ip' => $log['source_ip'] ?? null,
-                'target_port' => $log['target_port'] ?? null,
-                'actual_failed_attempts' => $log['failed_attempts'] ?? null,
-                'timestamp' => $log['timestamp'] ?? null,
+                ...array_diff_key($log, array_flip([
+                    'raw_log',
+                    'raw_log_snippets',
+                    'fact_snapshot',
+                    'explanation',
+                    'status',
+                    'triggered_rule_id',
+                ])),
             ],
             'comparison' => $comparison,
             'evidence_count' => count($this->evidenceForRule($rule, $log, $logs)),
@@ -166,6 +198,10 @@ class InferenceEngine
     private function evaluateJsonRule(ExpertRule $rule, array $log, array $logs): bool
     {
         $conditions = $rule->advanced_conditions;
+
+        if (($conditions['match_type'] ?? null) === 'ftp_burst') {
+            return $this->evaluateFtpBurstRule($conditions, $log, $logs);
+        }
 
         if (! array_key_exists('match_type', $conditions)) {
             return $this->matchesAdvancedConditions($rule, $log);
@@ -218,6 +254,43 @@ class InferenceEngine
         );
 
         return count($matchingLogsInWindow) >= $threshold;
+    }
+
+    /**
+     * @param  array<string, mixed>  $conditions
+     * @param  array<string, mixed>  $log
+     * @param  list<array<string, mixed>>  $logs
+     */
+    private function evaluateFtpBurstRule(array $conditions, array $log, array $logs): bool
+    {
+        $threshold = $conditions['threshold'] ?? null;
+        $windowSeconds = $conditions['window_seconds'] ?? null;
+        $logTimestamp = $this->parseTimestamp($log['timestamp'] ?? null);
+
+        if (! is_numeric($threshold)
+            || (int) $threshold < 1
+            || ! is_numeric($windowSeconds)
+            || (int) $windowSeconds < 0
+            || $logTimestamp === null
+            || ($log['completion_status'] ?? null) !== 'c') {
+            return false;
+        }
+
+        $windowStart = $logTimestamp->subSeconds((int) $windowSeconds);
+        $matchingLogs = array_filter(
+            $logs,
+            function (array $candidate) use ($log, $logTimestamp, $windowStart): bool {
+                $candidateTimestamp = $this->parseTimestamp($candidate['timestamp'] ?? null);
+
+                return ($candidate['remote_host'] ?? $candidate['source_ip'] ?? null)
+                    === ($log['remote_host'] ?? $log['source_ip'] ?? null)
+                    && ($candidate['completion_status'] ?? null) === 'c'
+                    && $candidateTimestamp !== null
+                    && $candidateTimestamp->betweenIncluded($windowStart, $logTimestamp);
+            },
+        );
+
+        return count($matchingLogs) >= (int) $threshold;
     }
 
     /**
