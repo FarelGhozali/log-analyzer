@@ -161,6 +161,7 @@ class LogParser
                 ];
             }
 
+            $row['raw_log'] = trim($line);
             $entries[] = $this->toEntry($row, 'baris ke-'.($startLine + $offset));
         }
 
@@ -200,6 +201,11 @@ class LogParser
                     'source_ip' => $entry['source_ip'],
                     'target_port' => $entry['target_port'],
                     'failed_attempts' => ($failedAttempts[$key]['failed_attempts'] ?? 0) + 1,
+                    'raw_log_snippets' => [
+                        ...($failedAttempts[$key]['raw_log_snippets'] ?? []),
+                        $entry['raw_log'],
+                    ],
+                    'timestamp' => $entry['timestamp'] ?? null,
                 ];
             } else {
                 $entries[] = $entry;
@@ -254,6 +260,7 @@ class LogParser
             'message' => trim($line),
             'timestamp' => $date->format(DATE_ATOM),
             'log_file' => 'log',
+            'raw_log' => trim($line),
         ], 'SSH log');
     }
 
@@ -290,6 +297,7 @@ class LogParser
             'status_code' => (int) $matches['status'],
             'timestamp' => $date->format(DATE_ATOM),
             'log_file' => 'log',
+            'raw_log' => trim($line),
         ], 'Apache log');
     }
 
@@ -315,14 +323,18 @@ class LogParser
             throw new InvalidLogFileException('Jumlah kegagalan tidak valid pada '.$label.'.');
         }
 
+        $rawLog = $row['raw_log'] ?? json_encode($row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
         return [
             'source_ip' => $sourceIp,
             'target_port' => (int) $targetPort,
             'failed_attempts' => (int) $failedAttempts,
+            'raw_log' => is_string($rawLog) ? $rawLog : '',
             ...array_diff_key($row, array_flip([
                 ...self::IP_KEYS,
                 ...self::PORT_KEYS,
                 ...self::FAILED_KEYS,
+                'raw_log',
             ])),
         ];
     }

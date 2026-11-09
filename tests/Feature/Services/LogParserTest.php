@@ -7,10 +7,10 @@ it('parses csv log files into normalized entries', function () {
     $entries = (new LogParser)->parse(fixturePath('logs/traffic.csv'));
 
     expect($entries)->toBe([
-        ['source_ip' => '203.0.113.10', 'target_port' => 22, 'failed_attempts' => 8],
-        ['source_ip' => '198.51.100.20', 'target_port' => 22, 'failed_attempts' => 2],
-        ['source_ip' => '192.0.2.30', 'target_port' => 443, 'failed_attempts' => 12],
-        ['source_ip' => '192.0.2.40', 'target_port' => 3306, 'failed_attempts' => 15],
+        ['source_ip' => '203.0.113.10', 'target_port' => 22, 'failed_attempts' => 8, 'raw_log' => '203.0.113.10,22,8'],
+        ['source_ip' => '198.51.100.20', 'target_port' => 22, 'failed_attempts' => 2, 'raw_log' => '198.51.100.20,22,2'],
+        ['source_ip' => '192.0.2.30', 'target_port' => 443, 'failed_attempts' => 12, 'raw_log' => '192.0.2.30,443,12'],
+        ['source_ip' => '192.0.2.40', 'target_port' => 3306, 'failed_attempts' => 15, 'raw_log' => '192.0.2.40,3306,15'],
     ]);
 });
 
@@ -18,8 +18,8 @@ it('parses csv headers written with alternate column names', function () {
     $entries = (new LogParser)->parse(fixturePath('logs/traffic-aliases.csv'));
 
     expect($entries)->toBe([
-        ['source_ip' => '203.0.113.10', 'target_port' => 22, 'failed_attempts' => 8],
-        ['source_ip' => '198.51.100.20', 'target_port' => 22, 'failed_attempts' => 2],
+        ['source_ip' => '203.0.113.10', 'target_port' => 22, 'failed_attempts' => 8, 'raw_log' => '203.0.113.10,22,8'],
+        ['source_ip' => '198.51.100.20', 'target_port' => 22, 'failed_attempts' => 2, 'raw_log' => '198.51.100.20,22,2'],
     ]);
 });
 
@@ -27,8 +27,8 @@ it('parses json log files with mixed column names', function () {
     $entries = (new LogParser)->parse(fixturePath('logs/traffic.json'));
 
     expect($entries)->toBe([
-        ['source_ip' => '203.0.113.10', 'target_port' => 22, 'failed_attempts' => 6],
-        ['source_ip' => '198.51.100.20', 'target_port' => 443, 'failed_attempts' => 9],
+        ['source_ip' => '203.0.113.10', 'target_port' => 22, 'failed_attempts' => 6, 'raw_log' => '{"source_ip":"203.0.113.10","target_port":22,"failed_attempts":6}'],
+        ['source_ip' => '198.51.100.20', 'target_port' => 443, 'failed_attempts' => 9, 'raw_log' => '{"source_ip":"198.51.100.20","port":443,"failed_count":9}'],
     ]);
 });
 
@@ -36,8 +36,8 @@ it('parses csv files that do not have a header row', function () {
     $entries = (new LogParser)->parse(fixturePath('logs/traffic-headerless.csv'));
 
     expect($entries)->toBe([
-        ['source_ip' => '203.0.113.10', 'target_port' => 22, 'failed_attempts' => 6],
-        ['source_ip' => '198.51.100.20', 'target_port' => 443, 'failed_attempts' => 9],
+        ['source_ip' => '203.0.113.10', 'target_port' => 22, 'failed_attempts' => 6, 'raw_log' => '203.0.113.10,22,6'],
+        ['source_ip' => '198.51.100.20', 'target_port' => 443, 'failed_attempts' => 9, 'raw_log' => '198.51.100.20,443,9'],
     ]);
 });
 

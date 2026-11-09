@@ -24,6 +24,23 @@ class ExpertRuleInfolist
                 TextEntry::make('conclusion_message')
                     ->label('Pesan Kesimpulan')
                     ->columnSpanFull(),
+                TextEntry::make('mitigation_recommendation')
+                    ->label('Rekomendasi Mitigasi')
+                    ->placeholder('Belum ditentukan')
+                    ->columnSpanFull(),
+                TextEntry::make('advanced_conditions')
+                    ->label('Kondisi Lanjutan')
+                    ->formatStateUsing(function (mixed $state): string {
+                        if (is_string($state)) {
+                            return $state;
+                        }
+
+                        return is_array($state)
+                            ? (json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) ?: '{}')
+                            : 'Mode dasar';
+                    })
+                    ->prose()
+                    ->columnSpanFull(),
                 TextEntry::make('created_at')
                     ->label('Dibuat Pada')
                     ->dateTime('d M Y H:i')

@@ -17,6 +17,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'scan_batch_id',
     'target_port',
     'failed_attempts',
+    'raw_log_snippets',
+    'event_timestamp',
+    'fact_snapshot',
+    'explanation',
     'status',
     'triggered_rule_id',
 ])]
@@ -33,6 +37,10 @@ class ScanResult extends Model
         return [
             'target_port' => 'integer',
             'failed_attempts' => 'integer',
+            'raw_log_snippets' => 'array',
+            'event_timestamp' => 'datetime',
+            'fact_snapshot' => 'array',
+            'explanation' => 'array',
             'status' => ScanStatus::class,
         ];
     }

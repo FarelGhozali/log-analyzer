@@ -20,6 +20,7 @@ class ExpertRuleSeeder extends Seeder
                 'min_failed_attempts' => 5,
                 'threat_level' => ThreatLevel::Critical,
                 'conclusion_message' => 'Serangan Brute Force SSH terdeteksi!',
+                'mitigation_recommendation' => 'Blokir IP sumber dengan UFW atau iptables dan aktifkan Fail2Ban untuk SSH.',
             ],
             [
                 'rule_name' => 'Deteksi Serangan FTP',
@@ -27,6 +28,7 @@ class ExpertRuleSeeder extends Seeder
                 'min_failed_attempts' => 5,
                 'threat_level' => ThreatLevel::High,
                 'conclusion_message' => 'Upaya akses paksa FTP terdeteksi!',
+                'mitigation_recommendation' => 'Batasi akses FTP berdasarkan IP yang diizinkan dan nonaktifkan autentikasi anonim.',
             ],
             [
                 'rule_name' => 'Deteksi Login Web Berulang HTTP',
@@ -34,6 +36,7 @@ class ExpertRuleSeeder extends Seeder
                 'min_failed_attempts' => 10,
                 'threat_level' => ThreatLevel::Medium,
                 'conclusion_message' => 'Percobaan login HTTP berulang terdeteksi!',
+                'mitigation_recommendation' => 'Aktifkan rate limiting, Fail2Ban, dan pembatasan akses endpoint login.',
             ],
             [
                 'rule_name' => 'Deteksi Login Web Berulang HTTPS',
@@ -41,6 +44,7 @@ class ExpertRuleSeeder extends Seeder
                 'min_failed_attempts' => 10,
                 'threat_level' => ThreatLevel::Medium,
                 'conclusion_message' => 'Percobaan login HTTPS berulang terdeteksi!',
+                'mitigation_recommendation' => 'Aktifkan rate limiting, Fail2Ban, dan pembatasan akses endpoint login.',
             ],
             [
                 'rule_name' => 'Deteksi Akses Paksa Database MySQL',
@@ -48,6 +52,7 @@ class ExpertRuleSeeder extends Seeder
                 'min_failed_attempts' => 10,
                 'threat_level' => ThreatLevel::Critical,
                 'conclusion_message' => 'Upaya akses paksa database MySQL terdeteksi!',
+                'mitigation_recommendation' => 'Batasi port MySQL hanya untuk jaringan aplikasi dan blokir IP sumber yang mencurigakan.',
             ],
         ];
 

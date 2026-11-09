@@ -33,6 +33,13 @@ it('persists an attack or safe result for every parsed log entry', function () {
         'triggered_rule_id' => $sshRule->id,
     ]);
 
+    $attack = ScanResult::query()->where('triggered_rule_id', $sshRule->id)->firstOrFail();
+
+    expect($attack->raw_log_snippets)->not->toBeEmpty()
+        ->and($attack->fact_snapshot['source_ip'])->toBe('203.0.113.10')
+        ->and($attack->explanation['rule']['name'])->toBe($sshRule->rule_name)
+        ->and($attack->explanation['comparison'])->toContain('8 percobaan gagal');
+
     $this->assertDatabaseHas('scan_results', [
         'source_ip' => '198.51.100.20',
         'target_port' => 22,

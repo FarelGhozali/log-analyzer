@@ -4,7 +4,9 @@ namespace App\Filament\Resources\ScanBatches\RelationManagers;
 
 use App\Enums\ScanStatus;
 use App\Filament\Resources\ExpertRules\ExpertRuleResource;
+use App\Filament\Resources\ScanResults\ScanResultResource;
 use App\Models\ScanResult;
+use Filament\Actions\ViewAction;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -41,6 +43,10 @@ class ResultsRelationManager extends RelationManager
             ->recordClasses(fn (ScanResult $record): ?string => $record->status === ScanStatus::Attack
                 ? 'bg-danger-50 dark:bg-danger-950/30'
                 : null)
+            ->recordActions([
+                ViewAction::make()
+                    ->url(fn (ScanResult $record): string => ScanResultResource::getUrl('view', ['record' => $record])),
+            ])
             ->defaultSort('failed_attempts', 'desc');
     }
 }

@@ -860,6 +860,7 @@ The tests cover parser validation, basic inference, advanced regular expressions
 | `min_failed_attempts` | unsigned integer | Basic-mode threshold |
 | `threat_level` | string | Threat level |
 | `conclusion_message` | string | Rule conclusion |
+| `mitigation_recommendation` | nullable text | Technical mitigation advice shown when the rule triggers |
 | `advanced_conditions` | nullable JSON | Advanced-mode conditions |
 | `created_at` | timestamp | Creation timestamp |
 | `updated_at` | timestamp | Update timestamp |
@@ -872,6 +873,10 @@ The tests cover parser validation, basic inference, advanced regular expressions
 | `source_ip` | string | Source address |
 | `target_port` | unsigned small integer | Destination port |
 | `failed_attempts` | unsigned integer | Failed attempts |
+| `raw_log_snippets` | nullable JSON | Raw log lines that contributed to the detection |
+| `event_timestamp` | nullable timestamp | Timestamp associated with the detected event |
+| `fact_snapshot` | nullable JSON | Normalized facts used during evaluation |
+| `explanation` | nullable JSON | Rule identity and fact-versus-condition explanation |
 | `status` | string | `SAFE` or `ATTACK` |
 | `triggered_rule_id` | nullable foreign key | Matching expert rule |
 | `created_at` | timestamp | Analysis timestamp |

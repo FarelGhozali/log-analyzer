@@ -3,10 +3,13 @@
 namespace App\Filament\Resources\ScanResults;
 
 use App\Filament\Resources\ScanResults\Pages\ListScanResults;
+use App\Filament\Resources\ScanResults\Pages\ViewScanResult;
+use App\Filament\Resources\ScanResults\Schemas\ScanResultInfolist;
 use App\Filament\Resources\ScanResults\Tables\ScanResultsTable;
 use App\Models\ScanResult;
 use BackedEnum;
 use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use UnitEnum;
@@ -38,6 +41,11 @@ class ScanResultResource extends Resource
         return ScanResultsTable::configure($table);
     }
 
+    public static function infolist(Schema $schema): Schema
+    {
+        return ScanResultInfolist::configure($schema);
+    }
+
     public static function getNavigationBadge(): ?string
     {
         $attackCount = ScanResult::query()->attacks()->count();
@@ -54,6 +62,7 @@ class ScanResultResource extends Resource
     {
         return [
             'index' => ListScanResults::route('/'),
+            'view' => ViewScanResult::route('/{record}'),
         ];
     }
 }

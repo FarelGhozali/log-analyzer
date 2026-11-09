@@ -7,6 +7,7 @@ use App\Filament\Resources\ExpertRules\ExpertRuleResource;
 use App\Models\ScanResult;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\ViewAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -72,6 +73,9 @@ class ScanResultsTable
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),
+            ])
+            ->recordActions([
+                ViewAction::make(),
             ])
             ->defaultSort('created_at', 'desc')
             ->emptyStateHeading('Belum ada hasil analisis')

@@ -39,12 +39,122 @@ class InferenceEngine
                         && $log['failed_attempts'] >= $rule->min_failed_attempts,
             );
 
-            return [
+            $result = [
                 ...$log,
                 'status' => $triggeredRule !== null ? ScanStatus::Attack : ScanStatus::Safe,
                 'triggered_rule_id' => $triggeredRule?->id,
             ];
+
+            if ($triggeredRule !== null) {
+                $result['fact_snapshot'] = [
+                    'source_ip' => $log['source_ip'] ?? null,
+                    'target_port' => $log['target_port'] ?? null,
+                    'failed_attempts' => $log['failed_attempts'] ?? null,
+                    'timestamp' => $log['timestamp'] ?? null,
+                ];
+                $result['raw_log_snippets'] = $this->evidenceForRule($triggeredRule, $log, $logs);
+                $result['explanation'] = $this->buildExplanation($triggeredRule, $log, $logs);
+            }
+
+            return $result;
         }, $logs);
+    }
+
+    /**
+     * @param  array<string, mixed>  $log
+     * @param  list<array<string, mixed>>  $logs
+     * @return list<string>
+     */
+    private function evidenceForRule(ExpertRule $rule, array $log, array $logs): array
+    {
+        $evidence = [];
+        $conditions = $rule->advanced_conditions;
+        $isRegexRule = $conditions !== null
+            && ($conditions['match_type'] ?? null) === 'regex';
+        $windowStart = null;
+        $logTimestamp = $this->parseTimestamp($log['timestamp'] ?? null);
+
+        if ($isRegexRule
+            && $logTimestamp !== null
+            && isset($conditions['time_window_minutes'])
+            && is_numeric($conditions['time_window_minutes'])
+            && (int) $conditions['time_window_minutes'] >= 0) {
+            $windowStart = $logTimestamp->subMinutes((int) $conditions['time_window_minutes']);
+        }
+
+        foreach ($logs as $candidate) {
+            if (! $this->belongsToSameSource($candidate, $log)) {
+                continue;
+            }
+
+            if ($rule->advanced_conditions === null
+                && (int) ($candidate['target_port'] ?? 0) !== $rule->target_port) {
+                continue;
+            }
+
+            if ($isRegexRule
+                && ! $this->matchesRegex($candidate, (string) ($conditions['pattern'] ?? ''))) {
+                continue;
+            }
+
+            if ($windowStart !== null) {
+                $candidateTimestamp = $this->parseTimestamp($candidate['timestamp'] ?? null);
+
+                if ($candidateTimestamp === null
+                    || $logTimestamp === null
+                    || ! $candidateTimestamp->betweenIncluded($windowStart, $logTimestamp)) {
+                    continue;
+                }
+            }
+
+            $snippets = $candidate['raw_log_snippets'] ?? [$candidate['raw_log'] ?? null];
+
+            foreach ($snippets as $snippet) {
+                if (is_string($snippet) && $snippet !== '') {
+                    $evidence[] = $snippet;
+                }
+            }
+        }
+
+        return array_values(array_unique($evidence));
+    }
+
+    /**
+     * @param  array<string, mixed>  $log
+     * @param  list<array<string, mixed>>  $logs
+     * @return array<string, mixed>
+     */
+    private function buildExplanation(ExpertRule $rule, array $log, array $logs): array
+    {
+        $isAdvanced = $rule->advanced_conditions !== null;
+        $actualAttempts = (int) ($log['failed_attempts'] ?? 0);
+        $comparison = $isAdvanced
+            ? 'Kondisi lanjutan pada aturan terpenuhi berdasarkan fakta log.'
+            : sprintf(
+                'Ditemukan %d percobaan gagal dari IP %s pada port %d, melampaui syarat minimal %d percobaan.',
+                $actualAttempts,
+                $log['source_ip'] ?? '-',
+                (int) ($log['target_port'] ?? 0),
+                $rule->min_failed_attempts,
+            );
+
+        return [
+            'rule' => [
+                'id' => $rule->id,
+                'name' => $rule->rule_name,
+                'target_port' => $rule->target_port,
+                'minimum_failed_attempts' => $rule->min_failed_attempts,
+                'advanced_conditions' => $rule->advanced_conditions,
+            ],
+            'facts' => [
+                'source_ip' => $log['source_ip'] ?? null,
+                'target_port' => $log['target_port'] ?? null,
+                'actual_failed_attempts' => $log['failed_attempts'] ?? null,
+                'timestamp' => $log['timestamp'] ?? null,
+            ],
+            'comparison' => $comparison,
+            'evidence_count' => count($this->evidenceForRule($rule, $log, $logs)),
+        ];
     }
 
     /**

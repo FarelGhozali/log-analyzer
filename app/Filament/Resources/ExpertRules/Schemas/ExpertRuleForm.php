@@ -55,6 +55,13 @@ class ExpertRuleForm
                                     ->maxLength(255)
                                     ->rows(3)
                                     ->columnSpanFull(),
+                                Textarea::make('mitigation_recommendation')
+                                    ->label('Rekomendasi Mitigasi')
+                                    ->placeholder('Contoh: Blokir IP sumber dengan UFW dan aktifkan Fail2Ban.')
+                                    ->helperText('Saran teknis yang ditampilkan pada detail hasil saat aturan terpicu.')
+                                    ->nullable()
+                                    ->rows(4)
+                                    ->columnSpanFull(),
                             ]),
                         Tab::make('Pengaturan Lanjutan')
                             ->schema([

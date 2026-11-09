@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'min_failed_attempts',
     'threat_level',
     'conclusion_message',
+    'mitigation_recommendation',
     'advanced_conditions',
 ])]
 class ExpertRule extends Model

@@ -24,6 +24,7 @@ class ExpertRuleFactory extends Factory
             'min_failed_attempts' => fake()->numberBetween(3, 10),
             'threat_level' => fake()->randomElement(ThreatLevel::cases()),
             'conclusion_message' => fake()->sentence(),
+            'mitigation_recommendation' => fake()->sentence(),
         ];
     }
 
